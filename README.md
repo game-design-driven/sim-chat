@@ -1,23 +1,16 @@
 # Sim Chat
 
-A Minecraft Forge mod that adds a phone-style chat interface for NPC dialogues. Designed for modpack creators to script conversations via datapacks and commands.
+A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogues. Designed for modpack creators to script conversations via datapacks and commands.
 
 ## Features
 
-- **Phone-style UI**: Sidebar with conversation list, chat history panel with message bubbles
+- **Slack/Discord-style UI**: Sidebar with conversation list, chat history panel with message bubbles
 - **Datapack-driven dialogues**: Define dialogue trees in JSON, loaded as datapack resources
 - **Action buttons**: Clickable response options that trigger commands or continue dialogue
 - **Typing indicators**: Simulated typing delay before messages appear
 - **Toast notifications**: Non-intrusive popups when new messages arrive
 - **Custom avatars**: Load PNG images from config folder for sender portraits
-- **Hot-reload avatars**: Drop new images in without restarting
-- **Resizable sidebar**: Drag divider to resize, snaps to compact (avatar-only) mode
 - **Per-player chat history**: Conversations persist per-player via capabilities
-
-## Installation
-
-1. Requires Minecraft Forge 1.20.1 (47.1.3+)
-2. Drop the mod JAR into your `mods` folder
 
 ## Commands
 

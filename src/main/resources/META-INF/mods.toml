@@ -1,0 +1,33 @@
+modLoader="javafml"
+loaderVersion="[44,)"
+license="MIT"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="YardenZamir"
+description='''
+Phone-style chat interface for NPC dialogues.
+
+Features:
+- Datapack-driven dialogue trees with action buttons
+- Custom avatars loaded from config folder
+- Typing indicators and toast notifications
+- Resizable sidebar with compact mode
+- Per-player conversation history
+'''
+
+[[dependencies.${mod_id}]]
+    modId="forge"
+    mandatory=true
+    versionRange="${forge_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"

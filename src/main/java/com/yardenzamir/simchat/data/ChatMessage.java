@@ -17,6 +17,7 @@ public final class ChatMessage {
     private static final String TAG_IS_PLAYER = "isPlayer";
     private static final String TAG_ENTITY_ID = "entityId";
     private static final String TAG_SENDER_NAME = "senderName";
+    private static final String TAG_SENDER_SUBTITLE = "senderSubtitle";
     private static final String TAG_SENDER_IMAGE = "senderImage";
     private static final String TAG_CONTENT = "content";
     private static final String TAG_WORLD_DAY = "worldDay";
@@ -27,17 +28,19 @@ public final class ChatMessage {
     private final boolean isPlayerMessage;
     private final String entityId;
     private final String senderName;
+    private final @Nullable String senderSubtitle;
     private final @Nullable String senderImageId;
     private final String content;
     private final long worldDay;
     private final List<ChatAction> actions;
 
     private ChatMessage(boolean isPlayerMessage, String entityId, String senderName,
-                        @Nullable String senderImageId, String content, long worldDay,
-                        List<ChatAction> actions) {
+                        @Nullable String senderSubtitle, @Nullable String senderImageId,
+                        String content, long worldDay, List<ChatAction> actions) {
         this.isPlayerMessage = isPlayerMessage;
         this.entityId = entityId;
         this.senderName = senderName;
+        this.senderSubtitle = senderSubtitle;
         this.senderImageId = senderImageId;
         this.content = content;
         this.worldDay = worldDay;
@@ -49,9 +52,9 @@ public final class ChatMessage {
      *
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
-    public static ChatMessage fromEntity(String entityId, String displayName, String imageId,
-                                         String content, long worldDay, List<ChatAction> actions) {
-        return new ChatMessage(false, entityId, displayName, imageId, content, worldDay, actions);
+    public static ChatMessage fromEntity(String entityId, String displayName, @Nullable String subtitle,
+                                         String imageId, String content, long worldDay, List<ChatAction> actions) {
+        return new ChatMessage(false, entityId, displayName, subtitle, imageId, content, worldDay, actions);
     }
 
     /**
@@ -60,7 +63,7 @@ public final class ChatMessage {
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
     public static ChatMessage fromPlayer(String entityId, String playerName, String content, long worldDay) {
-        return new ChatMessage(true, entityId, playerName, null, content, worldDay, Collections.emptyList());
+        return new ChatMessage(true, entityId, playerName, null, null, content, worldDay, Collections.emptyList());
     }
 
     public boolean isPlayerMessage() {
@@ -73,6 +76,10 @@ public final class ChatMessage {
 
     public String senderName() {
         return senderName;
+    }
+
+    public @Nullable String senderSubtitle() {
+        return senderSubtitle;
     }
 
     public @Nullable String senderImageId() {
@@ -106,7 +113,7 @@ public final class ChatMessage {
      * Returns a copy of this message with actions cleared.
      */
     public ChatMessage withoutActions() {
-        return new ChatMessage(isPlayerMessage, entityId, senderName, senderImageId,
+        return new ChatMessage(isPlayerMessage, entityId, senderName, senderSubtitle, senderImageId,
                 content, worldDay, Collections.emptyList());
     }
 
@@ -115,6 +122,9 @@ public final class ChatMessage {
         tag.putBoolean(TAG_IS_PLAYER, isPlayerMessage);
         tag.putString(TAG_ENTITY_ID, entityId);
         tag.putString(TAG_SENDER_NAME, senderName);
+        if (senderSubtitle != null) {
+            tag.putString(TAG_SENDER_SUBTITLE, senderSubtitle);
+        }
         if (senderImageId != null) {
             tag.putString(TAG_SENDER_IMAGE, senderImageId);
         }
@@ -155,6 +165,7 @@ public final class ChatMessage {
                 tag.getBoolean(TAG_IS_PLAYER),
                 tag.getString(TAG_ENTITY_ID),
                 tag.getString(TAG_SENDER_NAME),
+                tag.contains(TAG_SENDER_SUBTITLE) ? tag.getString(TAG_SENDER_SUBTITLE) : null,
                 tag.contains(TAG_SENDER_IMAGE) ? tag.getString(TAG_SENDER_IMAGE) : null,
                 tag.getString(TAG_CONTENT),
                 day,

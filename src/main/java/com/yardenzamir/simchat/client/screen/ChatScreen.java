@@ -187,11 +187,18 @@ public class ChatScreen extends Screen {
         // Chat area background
         graphics.fill(sidebarWidth, 0, width, height, 0xDD12121f);
 
-        // Header with selected entity name or empty state
+        // Header with selected entity name and subtitle or empty state
         if (selectedEntityId != null && minecraft != null && minecraft.player != null) {
             ChatCapability.get(minecraft.player).ifPresent(data -> {
                 String displayName = data.getEntityDisplayName(selectedEntityId);
-                graphics.drawString(font, displayName, sidebarWidth + PADDING, PADDING + 4, 0xFFFFFFFF);
+                int nameX = sidebarWidth + PADDING;
+                graphics.drawString(font, displayName, nameX, PADDING + 4, 0xFFFFFFFF);
+
+                String subtitle = data.getEntitySubtitle(selectedEntityId);
+                if (subtitle != null) {
+                    int subtitleX = nameX + font.width(displayName);
+                    graphics.drawString(font, " - " + subtitle, subtitleX, PADDING + 4, 0xFF888888);
+                }
             });
         } else {
             String emptyText = "Select a conversation";

@@ -85,16 +85,18 @@ public class ActionClickPacket {
                 // Sync full data to client (includes consumed actions + reply)
                 NetworkHandler.syncToPlayer(player);
 
-                // Execute command
-                if (!action.command().isEmpty()) {
-                    String command = action.command();
-                    if (command.startsWith("/")) {
-                        command = command.substring(1);
+                // Execute commands
+                for (String command : action.commands()) {
+                    if (!command.isEmpty()) {
+                        String cmd = command;
+                        if (cmd.startsWith("/")) {
+                            cmd = cmd.substring(1);
+                        }
+                        player.getServer().getCommands().performPrefixedCommand(
+                                player.createCommandSourceStack(),
+                                cmd
+                        );
                     }
-                    player.getServer().getCommands().performPrefixedCommand(
-                            player.createCommandSourceStack(),
-                            command
-                    );
                 }
             });
         });

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YardenZamir/sim-chat/schemas/entity-config.schema.json",
+  "title": "SimChat Entity Config",
+  "description": "Schema for SimChat entity configuration files in config/simchat/entities/<entityId>.json",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Default display name for this entity (used when dialogue doesn't specify entityName)"
+    },
+    "subtitle": {
+      "type": "string",
+      "description": "Default subtitle for this entity (e.g., company, title)"
+    },
+    "avatar": {
+      "type": "string",
+      "description": "Avatar ID to use (defaults to entityId). Loads from config/simchat/avatars/<avatar>.png"
+    }
+  },
+  "examples": [
+    {
+      "name": "Director Vex",
+      "subtitle": "Helion Industries",
+      "avatar": "contractor"
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import com.yardenzamir.simchat.client.ClientSetup;
 import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.config.ServerConfig;
 import com.yardenzamir.simchat.data.DialogueManager;
+import com.yardenzamir.simchat.data.EntityConfigManager;
 import com.yardenzamir.simchat.network.NetworkHandler;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.api.distmarker.Dist;
@@ -44,7 +45,10 @@ public class SimChatMod {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(NetworkHandler::init);
+        event.enqueueWork(() -> {
+            NetworkHandler.init();
+            EntityConfigManager.init();
+        });
     }
 
     private void onConfigLoad(ModConfigEvent.Loading event) {

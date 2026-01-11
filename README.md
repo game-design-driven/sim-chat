@@ -17,31 +17,36 @@ A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogu
 All commands require permission level 4 by default (configurable).
 
 ```
-/simchat send <player> <entityId> <dialogueId>
+/simchat send <player> <dialogueId>
 ```
-Send a dialogue message to a player. The `dialogueId` references a datapack resource.
+Send a dialogue message to a player. Uses `entityId` from the dialogue file.
 
 ## Datapack Format
 
 Dialogues are loaded from: `data/<namespace>/simchat/<path>.json`
 
-Example: `data/mypack/simchat/merchant/greeting.json`
+Example: `data/mypack/simchat/contractor/contract.json`
 
 ```json
 {
-  "sender": "Merchant Bob",
-  "image": "merchant",
-  "text": "Welcome! What can I help you with?",
+  "entityId": "contractor",
+  "entityName": "Director Vex",
+  "entitySubtitle": "Helion Industries",
+  "text": "We need 200 plasma conduits. Military-grade shielding. The Frontier Militia is buying and they don't ask questions. 5,000 credits on delivery, plus a bonus for discretion.",
   "actions": [
     {
-      "label": "Buy items",
-      "command": "simchat send @s merchant mypack:merchant/shop",
-      "reply": "Show me what you have."
+      "label": "I'll take it",
+      "commands": ["simchat send @s mypack:contractor/contract_accept"],
+      "reply": "Send the specifications.",
+      "items": [
+        {"id": "minecraft:copper_ingot", "count": 64},
+        {"id": "minecraft:redstone", "count": 32}
+      ]
     },
     {
-      "label": "Just browsing",
-      "command": "",
-      "reply": "Just looking around."
+      "label": "Need time to decide",
+      "commands": ["simchat send @s mypack:contractor/contract_later"],
+      "reply": "Let me review my production queue."
     }
   ]
 }
@@ -51,22 +56,63 @@ Example: `data/mypack/simchat/merchant/greeting.json`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `sender` | string | Display name shown in chat |
-| `image` | string | Avatar image ID (loads from `config/simchat/avatars/<image>.png`) |
+| `entityId` | string | Unique entity identifier (also used for avatar lookup) |
+| `entityName` | string | Display name shown in chat |
+| `entitySubtitle` | string | Subtitle (company, title) shown next to name (optional) |
 | `text` | string | Message content |
 | `actions` | array | Response buttons (optional) |
 | `actions[].label` | string | Button text |
-| `actions[].command` | string | Command to run when clicked (empty = just show reply) |
+| `actions[].commands` | array | Commands to run when clicked (array of strings) |
 | `actions[].reply` | string | Player's reply text shown in chat |
+| `actions[].items` | array | Items to display on button (optional) |
+| `actions[].items[].id` | string | Item ID (e.g., "minecraft:diamond") |
+| `actions[].items[].count` | int | Item count (default: 1) |
+
+### JSON Schema
+
+Validate your dialogues with the JSON schema at [`schemas/dialogue.schema.json`](schemas/dialogue.schema.json).
+
+To use in VS Code, add to your dialogue files:
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/YardenZamir/sim-chat/main/schemas/dialogue.schema.json",
+  "entityId": "...",
+  ...
+}
+```
 
 ## Custom Avatars
 
 Place PNG images in: `config/simchat/avatars/`
 
-Filename (without extension) becomes the image ID. Example:
-- `config/simchat/avatars/merchant.png` → use `"image": "merchant"`
+Filename (without extension) becomes the avatar ID. Example:
+- `config/simchat/avatars/merchant.png` → entity with `entityId: "merchant"` uses this avatar
 
 Images hot-reload when modified. Any size works, displayed at 36x36.
+
+## Entity Config Files
+
+Define default entity info in: `config/simchat/entities/<entityId>.json`
+
+These provide fallback values when not specified in dialogue files.
+
+Example: `config/simchat/entities/merchant.json`
+
+```json
+{
+  "name": "Merchant Bob",
+  "subtitle": "Ironwood Trading Co.",
+  "avatar": "merchant"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Default display name for this entity |
+| `subtitle` | Default subtitle (company, title) |
+| `avatar` | Avatar ID to use (defaults to entityId) |
+
+Entity configs hot-reload when modified.
 
 ## Configuration
 

@@ -35,13 +35,12 @@ public class SimChatCommands {
 
         dispatcher.register(Commands.literal("simchat")
                 .requires(source -> source.hasPermission(ServerConfig.COMMAND_PERMISSION_LEVEL.get()))
-                // send <player> <entity_id> <dialogue_id>
+                // send <player> <dialogue_id> - uses entityId from dialogue
                 .then(Commands.literal("send")
                         .then(Commands.argument("player", EntityArgument.player())
-                                .then(Commands.argument("entity_id", StringArgumentType.word())
-                                        .then(Commands.argument("dialogue_id", ResourceLocationArgument.id())
-                                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggestResource(DialogueManager.getDialogueIds(), builder))
-                                                .executes(SimChatCommands::sendDialogue)))))
+                                .then(Commands.argument("dialogue_id", ResourceLocationArgument.id())
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggestResource(DialogueManager.getDialogueIds(), builder))
+                                        .executes(SimChatCommands::sendDialogue))))
                 // clear <player> [entity_id]
                 .then(Commands.literal("clear")
                         .then(Commands.argument("player", EntityArgument.player())
@@ -72,7 +71,6 @@ public class SimChatCommands {
 
     private static int sendDialogue(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
-        String entityId = StringArgumentType.getString(ctx, "entity_id");
         ResourceLocation dialogueId = ResourceLocationArgument.getId(ctx, "dialogue_id");
 
         DialogueData dialogue = DialogueManager.get(dialogueId);
@@ -81,8 +79,13 @@ public class SimChatCommands {
             return 0;
         }
 
+        if (dialogue.entityId() == null || dialogue.entityId().isEmpty()) {
+            ctx.getSource().sendFailure(Component.literal("Dialogue " + dialogueId + " has no entityId"));
+            return 0;
+        }
+
         long worldDay = getWorldDay(player);
-        ChatMessage message = dialogue.toMessage(entityId, worldDay);
+        ChatMessage message = dialogue.toMessage(dialogue.entityId(), worldDay);
 
         float delay = calculateDelay(dialogue.text());
         int delayTicks = (int) (delay * 20);

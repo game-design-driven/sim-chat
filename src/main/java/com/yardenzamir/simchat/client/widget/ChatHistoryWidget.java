@@ -15,6 +15,7 @@ import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -27,8 +28,9 @@ public class ChatHistoryWidget extends AbstractWidget {
 
     private static final int AVATAR_SIZE = 32;
     private static final int MESSAGE_PADDING = 8;
-    private static final int BUTTON_HEIGHT = 18;
+    private static final int BUTTON_HEIGHT = 20;
     private static final int BUTTON_PADDING = 4;
+    private static final int ITEM_ICON_SIZE = 16;
 
     private static final int TYPING_INDICATOR_HEIGHT = 32;
 
@@ -185,15 +187,21 @@ public class ChatHistoryWidget extends AbstractWidget {
         int textY = y;
         int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
 
-        // Sender name with timestamp
+        // Sender name with subtitle and timestamp
         int nameColor = message.isPlayerMessage() ? 0xFF88FF88 : 0xFF88AAFF;
-        String nameWithDay = message.senderName() + "  ";
-        graphics.drawString(minecraft.font, nameWithDay, textX, textY, nameColor);
+        graphics.drawString(minecraft.font, message.senderName(), textX, textY, nameColor);
+        int nextX = textX + minecraft.font.width(message.senderName());
 
-        // Day timestamp (grayed out, after name)
-        String dayText = "Day " + message.worldDay();
-        int dayX = textX + minecraft.font.width(nameWithDay);
-        graphics.drawString(minecraft.font, dayText, dayX, textY, 0xFF666666);
+        // Subtitle (for non-player messages)
+        if (!message.isPlayerMessage() && message.senderSubtitle() != null) {
+            String subtitle = " - " + message.senderSubtitle();
+            graphics.drawString(minecraft.font, subtitle, nextX, textY, 0xFF888888);
+            nextX += minecraft.font.width(subtitle);
+        }
+
+        // Day timestamp (grayed out)
+        String dayText = "  Day " + message.worldDay();
+        graphics.drawString(minecraft.font, dayText, nextX, textY, 0xFF666666);
         textY += minecraft.font.lineHeight + 2;
 
         // Message content with wrapping
@@ -209,7 +217,7 @@ public class ChatHistoryWidget extends AbstractWidget {
             int buttonY = textY + BUTTON_PADDING;
 
             for (ChatAction action : message.actions()) {
-                int buttonWidth = minecraft.font.width(action.label()) + 16;
+                int buttonWidth = calculateButtonWidth(action);
 
                 // Check if mouse is hovering
                 boolean hovered = mouseX >= buttonX && mouseX < buttonX + buttonWidth
@@ -223,15 +231,48 @@ public class ChatHistoryWidget extends AbstractWidget {
                 int borderColor = hovered ? 0xFF6080C0 : 0xFF405090;
                 graphics.renderOutline(buttonX, buttonY, buttonWidth, BUTTON_HEIGHT, borderColor);
 
-                // Button text
-                int textXOffset = (buttonWidth - minecraft.font.width(action.label())) / 2;
+                // Render items first
+                int itemsWidth = 0;
+                if (!action.items().isEmpty()) {
+                    int itemX = buttonX + 4;
+                    for (ChatAction.ActionItem item : action.items()) {
+                        ItemStack stack = item.toItemStack();
+                        if (stack != null) {
+                            graphics.renderItem(stack, itemX, buttonY + (BUTTON_HEIGHT - ITEM_ICON_SIZE) / 2);
+                            // Render count if > 1
+                            if (item.count() > 1) {
+                                graphics.renderItemDecorations(minecraft.font, stack, itemX, buttonY + (BUTTON_HEIGHT - ITEM_ICON_SIZE) / 2);
+                            }
+                            itemX += ITEM_ICON_SIZE + 2;
+                            itemsWidth += ITEM_ICON_SIZE + 2;
+                        }
+                    }
+                }
+
+                // Button text (after items)
+                int labelX = buttonX + 8 + itemsWidth;
                 int textYOffset = (BUTTON_HEIGHT - minecraft.font.lineHeight) / 2;
-                graphics.drawString(minecraft.font, action.label(),
-                        buttonX + textXOffset, buttonY + textYOffset, 0xFFFFFFFF);
+                graphics.drawString(minecraft.font, action.label(), labelX, buttonY + textYOffset, 0xFFFFFFFF);
 
                 buttonX += buttonWidth + BUTTON_PADDING;
             }
         }
+    }
+
+    private int calculateButtonWidth(ChatAction action) {
+        int width = minecraft.font.width(action.label()) + 16;
+
+        // Add space for items
+        if (!action.items().isEmpty()) {
+            for (ChatAction.ActionItem item : action.items()) {
+                ItemStack stack = item.toItemStack();
+                if (stack != null) {
+                    width += ITEM_ICON_SIZE + 2;
+                }
+            }
+        }
+
+        return width;
     }
 
     private void renderTypingIndicator(GuiGraphics graphics, int x, int y, float partialTick) {
@@ -290,7 +331,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                 if (mouseY >= buttonY && mouseY < buttonY + BUTTON_HEIGHT) {
                     int buttonX = textX;
                     for (ChatAction action : message.actions()) {
-                        int buttonWidth = minecraft.font.width(action.label()) + 16;
+                        int buttonWidth = calculateButtonWidth(action);
 
                         if (mouseX >= buttonX && mouseX < buttonX + buttonWidth) {
                             // Button clicked - send packet to server

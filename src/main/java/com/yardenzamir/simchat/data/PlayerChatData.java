@@ -3,6 +3,7 @@ package com.yardenzamir.simchat.data;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -104,6 +105,23 @@ public class PlayerChatData {
             ChatMessage msg = messages.get(i);
             if (!msg.isPlayerMessage() && msg.senderImageId() != null) {
                 return msg.senderImageId();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Gets the subtitle for an entity from its most recent message.
+     */
+    public @Nullable String getEntitySubtitle(String entityId) {
+        List<ChatMessage> messages = conversations.get(entityId);
+        if (messages == null || messages.isEmpty()) {
+            return null;
+        }
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (!msg.isPlayerMessage() && msg.senderSubtitle() != null) {
+                return msg.senderSubtitle();
             }
         }
         return null;

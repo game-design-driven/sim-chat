@@ -40,6 +40,7 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
             addEntry(new EntityEntry(
                 entityId,
                 data.getEntityDisplayName(entityId),
+                data.getEntitySubtitle(entityId),
                 data.getEntityImageId(entityId),
                 data.hasUnread(entityId),
                 data.getUnreadCount(entityId),
@@ -117,17 +118,19 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
     public class EntityEntry extends Entry<EntityEntry> {
         final String entityId;
         final String displayName;
+        final @Nullable String subtitle;
         final @Nullable String imageId;
         final boolean hasUnread;
         final int unreadCount;
         final boolean isTyping;
         final @Nullable ChatMessage lastMessage;
 
-        public EntityEntry(String entityId, String displayName, @Nullable String imageId,
-                          boolean hasUnread, int unreadCount, boolean isTyping,
-                          @Nullable ChatMessage lastMessage) {
+        public EntityEntry(String entityId, String displayName, @Nullable String subtitle,
+                          @Nullable String imageId, boolean hasUnread, int unreadCount,
+                          boolean isTyping, @Nullable ChatMessage lastMessage) {
             this.entityId = entityId;
             this.displayName = displayName;
+            this.subtitle = subtitle;
             this.imageId = imageId;
             this.hasUnread = hasUnread;
             this.unreadCount = unreadCount;
@@ -181,7 +184,19 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
                 int textX = avatarX + AVATAR_SIZE + PADDING;
                 int textMaxWidth = contentRight - textX - PADDING - (hasUnread ? UNREAD_DOT_SIZE + PADDING : 0);
 
-                graphics.drawString(minecraft.font, truncate(displayName, textMaxWidth), textX, top + PADDING, hasUnread ? 0xFFFFFFFF : 0xFFAAAAAA);
+                // Name and subtitle on first line
+                String truncatedName = truncate(displayName, textMaxWidth);
+                graphics.drawString(minecraft.font, truncatedName, textX, top + PADDING, hasUnread ? 0xFFFFFFFF : 0xFFAAAAAA);
+
+                // Subtitle after name if there's space
+                if (subtitle != null && !subtitle.isEmpty()) {
+                    int nameWidth = minecraft.font.width(truncatedName);
+                    int subtitleX = textX + nameWidth + 4;
+                    int subtitleMaxWidth = textMaxWidth - nameWidth - 4;
+                    if (subtitleMaxWidth > 20) {
+                        graphics.drawString(minecraft.font, truncate(subtitle, subtitleMaxWidth), subtitleX, top + PADDING, 0xFF666666);
+                    }
+                }
 
                 String preview = isTyping ? "typing..." : (lastMessage != null ? (lastMessage.isPlayerMessage() ? "You: " : "") + lastMessage.content() : "");
                 if (!preview.isEmpty() && textMaxWidth > 20) {

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YardenZamir/sim-chat/schemas/dialogue.schema.json",
+  "title": "SimChat Dialogue",
+  "description": "Schema for SimChat dialogue entries used in datapacks",
+  "type": "object",
+  "required": ["entityId", "entityName", "text"],
+  "properties": {
+    "entityId": {
+      "type": "string",
+      "description": "Unique identifier for the entity. Used for conversation grouping and avatar lookup (loads from config/simchat/avatars/<entityId>.png)",
+      "minLength": 1
+    },
+    "entityName": {
+      "type": "string",
+      "description": "Display name shown in chat and sidebar",
+      "minLength": 1
+    },
+    "entitySubtitle": {
+      "type": "string",
+      "description": "Optional subtitle shown next to name (e.g., company, title, affiliation)"
+    },
+    "text": {
+      "type": "string",
+      "description": "Message content displayed in the chat",
+      "minLength": 1
+    },
+    "actions": {
+      "type": "array",
+      "description": "Response buttons shown below the message",
+      "items": {
+        "type": "object",
+        "required": ["label"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Button text",
+            "minLength": 1
+          },
+          "commands": {
+            "type": "array",
+            "description": "Commands to execute when clicked (in order). Use 'simchat send @s <namespace>:<path>' to chain dialogues",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "reply": {
+            "type": "string",
+            "description": "Player's reply text shown in chat when button is clicked"
+          },
+          "items": {
+            "type": "array",
+            "description": "Items to display on the button",
+            "items": {
+              "type": "object",
+              "required": ["id"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Item ID (e.g., 'minecraft:diamond', 'create:precision_mechanism')",
+                  "pattern": "^[a-z0-9_.-]+:[a-z0-9_/.-]+$"
+                },
+                "count": {
+                  "type": "integer",
+                  "description": "Item count",
+                  "minimum": 1,
+                  "maximum": 64,
+                  "default": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "entityId": "contractor",
+      "entityName": "Director Vex",
+      "entitySubtitle": "Helion Industries",
+      "text": "We need 200 plasma conduits. Military-grade shielding. 5,000 credits on delivery.",
+      "actions": [
+        {
+          "label": "I'll take it",
+          "commands": ["simchat send @s mypack:contractor/accept"],
+          "reply": "Send the specifications.",
+          "items": [
+            {"id": "minecraft:copper_ingot", "count": 64},
+            {"id": "minecraft:redstone", "count": 32}
+          ]
+        },
+        {
+          "label": "Not interested",
+          "commands": [],
+          "reply": "Find someone else."
+        }
+      ]
+    }
+  ]
+}

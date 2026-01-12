@@ -83,8 +83,8 @@ public class NetworkHandler {
     /**
      * Sends typing indicator to client.
      */
-    public static void sendTyping(ServerPlayer player, String entityId, String displayName, String imageId, boolean isTyping) {
+    public static void sendTyping(ServerPlayer player, String entityId, boolean isTyping) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                new TypingPacket(entityId, displayName, imageId, isTyping));
+                new TypingPacket(entityId, isTyping));
     }
 }

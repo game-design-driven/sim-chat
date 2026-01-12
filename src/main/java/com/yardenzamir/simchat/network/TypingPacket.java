@@ -15,31 +15,20 @@ import java.util.function.Supplier;
 public class TypingPacket {
 
     private final String entityId;
-    private final String displayName;
-    private final String imageId;
     private final boolean isTyping;
 
-    public TypingPacket(String entityId, String displayName, String imageId, boolean isTyping) {
+    public TypingPacket(String entityId, boolean isTyping) {
         this.entityId = entityId;
-        this.displayName = displayName;
-        this.imageId = imageId;
         this.isTyping = isTyping;
     }
 
     public static void encode(TypingPacket packet, FriendlyByteBuf buf) {
         buf.writeUtf(packet.entityId);
-        buf.writeUtf(packet.displayName);
-        buf.writeUtf(packet.imageId);
         buf.writeBoolean(packet.isTyping);
     }
 
     public static TypingPacket decode(FriendlyByteBuf buf) {
-        return new TypingPacket(
-                buf.readUtf(),
-                buf.readUtf(),
-                buf.readUtf(),
-                buf.readBoolean()
-        );
+        return new TypingPacket(buf.readUtf(), buf.readBoolean());
     }
 
     public static void handle(TypingPacket packet, Supplier<NetworkEvent.Context> ctx) {

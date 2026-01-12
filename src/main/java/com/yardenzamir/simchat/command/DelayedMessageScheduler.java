@@ -26,8 +26,7 @@ public class DelayedMessageScheduler {
     private static final List<PendingMessage> pendingMessages = new ArrayList<>();
 
     public static void schedule(ServerPlayer player, ChatMessage message, int delayTicks) {
-        NetworkHandler.sendTyping(player, message.entityId(), message.senderName(),
-                message.senderImageId(), true);
+        NetworkHandler.sendTyping(player, message.entityId(), true);
         pendingMessages.add(new PendingMessage(player.getUUID(), message, delayTicks));
     }
 
@@ -74,8 +73,7 @@ public class DelayedMessageScheduler {
     }
 
     private static void deliverMessage(ServerPlayer player, ChatMessage message) {
-        NetworkHandler.sendTyping(player, message.entityId(),
-                message.senderName(), message.senderImageId(), false);
+        NetworkHandler.sendTyping(player, message.entityId(), false);
 
         ChatCapability.get(player).ifPresent(data -> {
             data.addMessage(message);

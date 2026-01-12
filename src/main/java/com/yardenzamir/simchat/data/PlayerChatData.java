@@ -77,37 +77,35 @@ public class PlayerChatData {
     }
 
     /**
-     * Gets the display name for an entity from its most recent message.
+     * Gets the display name for an entity from most recent message or EntityConfigManager.
      */
     public String getEntityDisplayName(String entityId) {
         List<ChatMessage> messages = conversations.get(entityId);
-        if (messages == null || messages.isEmpty()) {
-            return entityId;
-        }
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            ChatMessage msg = messages.get(i);
-            if (!msg.isPlayerMessage()) {
-                return msg.senderName();
+        if (messages != null) {
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage msg = messages.get(i);
+                if (!msg.isPlayerMessage()) {
+                    return msg.senderName();
+                }
             }
         }
-        return entityId;
+        return EntityConfigManager.getName(entityId, null);
     }
 
     /**
-     * Gets the image ID for an entity from its most recent message.
+     * Gets the image ID for an entity from most recent message or EntityConfigManager.
      */
     public String getEntityImageId(String entityId) {
         List<ChatMessage> messages = conversations.get(entityId);
-        if (messages == null || messages.isEmpty()) {
-            return null;
-        }
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            ChatMessage msg = messages.get(i);
-            if (!msg.isPlayerMessage() && msg.senderImageId() != null) {
-                return msg.senderImageId();
+        if (messages != null) {
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage msg = messages.get(i);
+                if (!msg.isPlayerMessage() && msg.senderImageId() != null) {
+                    return msg.senderImageId();
+                }
             }
         }
-        return null;
+        return EntityConfigManager.getAvatar(entityId, null);
     }
 
     /**

@@ -1,10 +1,12 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.capability.ChatCapability;
 import com.yardenzamir.simchat.client.ChatToast;
 import com.yardenzamir.simchat.client.ClientSetup;
+import com.yardenzamir.simchat.client.ClientTeamCache;
+import com.yardenzamir.simchat.client.screen.ChatScreen;
 import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -19,7 +21,8 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 /**
- * Sends a single new message from server to client.
+ * Sends a new message notification from server to client.
+ * Message data is synced via SyncTeamDataPacket; this is for sound/toast.
  */
 public class NewMessagePacket {
 
@@ -53,35 +56,33 @@ public class NewMessagePacket {
     }
 
     private static void handleClient(NewMessagePacket packet) {
-        var mc = Minecraft.getInstance();
-        var player = mc.player;
-        if (player != null) {
-            ChatMessage message = ChatMessage.fromNbt(packet.messageData);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
 
-            ChatCapability.get(player).ifPresent(data -> {
-                // Clear typing state when message arrives
-                data.setTyping(message.entityId(), false);
-                data.addMessage(message);
-            });
+        ChatMessage message = ChatMessage.fromNbt(packet.messageData);
 
-            // Play notification sound and show toast for entity messages (not player replies)
-            if (!message.isPlayerMessage()) {
-                // Play sound if configured
-                String soundPath = ClientConfig.NOTIFICATION_SOUND.get();
-                if (!soundPath.isEmpty()) {
-                    ResourceLocation soundId = new ResourceLocation(soundPath);
-                    SoundEvent sound = BuiltInRegistries.SOUND_EVENT.get(soundId);
-                    if (sound != null) {
-                        float volume = ClientConfig.NOTIFICATION_VOLUME.get().floatValue();
-                        mc.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.0f, volume));
-                    }
+        // Clear typing state on team data
+        TeamData team = ClientTeamCache.getTeam();
+        if (team != null) {
+            team.setTyping(message.entityId(), false);
+        }
+
+        // Play notification sound and show toast for entity messages (not player replies)
+        if (!message.isPlayerMessage()) {
+            String soundPath = ClientConfig.NOTIFICATION_SOUND.get();
+            if (!soundPath.isEmpty()) {
+                ResourceLocation soundId = new ResourceLocation(soundPath);
+                SoundEvent sound = BuiltInRegistries.SOUND_EVENT.get(soundId);
+                if (sound != null) {
+                    float volume = ClientConfig.NOTIFICATION_VOLUME.get().floatValue();
+                    mc.getSoundManager().play(SimpleSoundInstance.forUI(sound, 1.0f, volume));
                 }
+            }
 
-                // Show toast if enabled
-                if (packet.showToast && ClientConfig.SHOW_TOASTS.get()) {
-                    String keybindName = ClientSetup.getOpenChatKeyName();
-                    mc.getToasts().addToast(new ChatToast(message, keybindName));
-                }
+            if (packet.showToast && ClientConfig.SHOW_TOASTS.get()) {
+                String keybindName = ClientSetup.getOpenChatKeyName();
+                boolean showKeybindHint = !(mc.screen instanceof ChatScreen);
+                mc.getToasts().addToast(new ChatToast(message, keybindName, showKeybindHint));
             }
         }
     }

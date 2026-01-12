@@ -12,7 +12,8 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 /**
- * Syncs full chat data from server to client.
+ * Syncs per-player read receipt data from server to client.
+ * Conversation data is synced via SyncTeamDataPacket.
  */
 public class SyncChatDataPacket {
 

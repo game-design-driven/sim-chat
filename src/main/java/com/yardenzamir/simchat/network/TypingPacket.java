@@ -1,7 +1,7 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.capability.ChatCapability;
-import net.minecraft.client.Minecraft;
+import com.yardenzamir.simchat.client.ClientTeamCache;
+import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -39,11 +39,9 @@ public class TypingPacket {
     }
 
     private static void handleClient(TypingPacket packet) {
-        var player = Minecraft.getInstance().player;
-        if (player != null) {
-            ChatCapability.get(player).ifPresent(data -> {
-                data.setTyping(packet.entityId, packet.isTyping);
-            });
+        TeamData team = ClientTeamCache.getTeam();
+        if (team != null) {
+            team.setTyping(packet.entityId, packet.isTyping);
         }
     }
 }

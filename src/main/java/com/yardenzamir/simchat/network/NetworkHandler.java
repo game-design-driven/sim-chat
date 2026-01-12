@@ -2,18 +2,24 @@ package com.yardenzamir.simchat.network;
 
 import com.yardenzamir.simchat.SimChatMod;
 import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.team.SimChatTeamManager;
+import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
+
+import java.util.List;
 
 /**
  * Handles network packet registration and sending.
  */
 public class NetworkHandler {
 
-    private static final String PROTOCOL_VERSION = "2";
+    private static final String PROTOCOL_VERSION = "3";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(SimChatMod.MOD_ID, "main"),
@@ -54,6 +60,11 @@ public class NetworkHandler {
                 MarkAsReadPacket::encode,
                 MarkAsReadPacket::decode,
                 MarkAsReadPacket::handle);
+
+        CHANNEL.registerMessage(packetId++, SyncTeamDataPacket.class,
+                SyncTeamDataPacket::encode,
+                SyncTeamDataPacket::decode,
+                SyncTeamDataPacket::handle);
     }
 
     /**
@@ -86,5 +97,47 @@ public class NetworkHandler {
     public static void sendTyping(ServerPlayer player, String entityId, boolean isTyping) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new TypingPacket(entityId, isTyping));
+    }
+
+    // === Team sync methods ===
+
+    /**
+     * Syncs team data to a specific player.
+     */
+    public static void syncTeamToPlayer(ServerPlayer player, TeamData team) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SyncTeamDataPacket(team));
+    }
+
+    /**
+     * Syncs team data to all online team members.
+     */
+    public static void syncTeamToAllMembers(TeamData team, MinecraftServer server) {
+        SimChatTeamManager manager = SimChatTeamManager.get(server);
+        List<ServerPlayer> members = manager.getOnlineTeamMembers(team);
+        for (ServerPlayer member : members) {
+            syncTeamToPlayer(member, team);
+        }
+    }
+
+    /**
+     * Sends a new message to all online team members.
+     */
+    public static void sendMessageToTeam(TeamData team, ChatMessage message, MinecraftServer server, boolean showToast) {
+        SimChatTeamManager manager = SimChatTeamManager.get(server);
+        List<ServerPlayer> members = manager.getOnlineTeamMembers(team);
+        for (ServerPlayer member : members) {
+            sendNewMessage(member, message, showToast);
+        }
+    }
+
+    /**
+     * Sends typing indicator to all online team members.
+     */
+    public static void sendTypingToTeam(TeamData team, String entityId, boolean isTyping, MinecraftServer server) {
+        SimChatTeamManager manager = SimChatTeamManager.get(server);
+        List<ServerPlayer> members = manager.getOnlineTeamMembers(team);
+        for (ServerPlayer member : members) {
+            sendTyping(member, entityId, isTyping);
+        }
     }
 }

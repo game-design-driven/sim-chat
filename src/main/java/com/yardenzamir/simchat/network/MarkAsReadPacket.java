@@ -1,6 +1,8 @@
 package com.yardenzamir.simchat.network;
 
 import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.team.SimChatTeamManager;
+import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -31,8 +33,15 @@ public class MarkAsReadPacket {
             ServerPlayer player = ctx.get().getSender();
             if (player == null) return;
 
+            // Get message count from team data
+            SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+            TeamData team = manager.getPlayerTeam(player);
+            if (team == null) return;
+
+            int messageCount = team.getMessageCount(packet.entityId);
+
             ChatCapability.get(player).ifPresent(data -> {
-                data.markAsRead(packet.entityId);
+                data.markAsRead(packet.entityId, messageCount);
             });
         });
         ctx.get().setPacketHandled(true);

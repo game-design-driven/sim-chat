@@ -4,6 +4,7 @@ import com.yardenzamir.simchat.SimChatMod;
 import com.yardenzamir.simchat.client.screen.ChatScreen;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -48,6 +49,12 @@ public class ClientSetup {
                 mc.setScreen(new ChatScreen(null));
             }
         }
+    }
+
+    @SubscribeEvent
+    public static void onClientDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
+        ClientTeamCache.clear();
+        // Don't clear PlayerSkinCache - keep skins cached for offline teammates
     }
 
     /**

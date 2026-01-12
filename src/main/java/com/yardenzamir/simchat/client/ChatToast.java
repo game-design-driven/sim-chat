@@ -16,21 +16,24 @@ import net.minecraft.resources.ResourceLocation;
 public class ChatToast implements Toast {
 
     private static final int TOAST_WIDTH = 160;
-    private static final int TOAST_HEIGHT = 44;
-    private static final int ICON_SIZE = 36;
+    private static final int TOAST_HEIGHT = 42;
+    private static final int ICON_SIZE = 34;
     private static final int PADDING = 4;
+    private static final int TEXT_SPACING = 1;
 
     private final String senderName;
     private final String messagePreview;
     private final ResourceLocation iconTexture;
     private final String keybindHint;
+    private final boolean showKeybindHint;
     private long firstRender = -1;
 
-    public ChatToast(ChatMessage message, String keybindName) {
+    public ChatToast(ChatMessage message, String keybindName, boolean showKeybindHint) {
         this.senderName = message.senderName();
         this.messagePreview = truncateMessage(message.content(), 100);
         this.iconTexture = AvatarManager.getTexture(message.senderImageId());
-        this.keybindHint = "[" + keybindName + "] to open";
+        this.keybindHint = "[" + keybindName + "]";
+        this.showKeybindHint = showKeybindHint;
     }
 
     private static String truncateMessage(String text, int maxLength) {
@@ -67,14 +70,16 @@ public class ChatToast implements Toast {
         while (font.width(preview) > textMaxWidth && preview.length() > 3) {
             preview = preview.substring(0, preview.length() - 4) + "...";
         }
-        graphics.drawString(font, preview, textX, PADDING + font.lineHeight + 1, 0xFFCCCCCC, false);
+        graphics.drawString(font, preview, textX, PADDING + font.lineHeight + TEXT_SPACING, 0xFFCCCCCC, false);
 
-        // Keybind hint at bottom
-        int hintWidth = font.width(keybindHint);
-        graphics.drawString(font, keybindHint,
-                TOAST_WIDTH - hintWidth - PADDING,
-                TOAST_HEIGHT - font.lineHeight - 2,
-                0xFF666688, false);
+        // Keybind hint at bottom (only when not already in chat)
+        if (showKeybindHint) {
+            int hintWidth = font.width(keybindHint);
+            graphics.drawString(font, keybindHint,
+                    TOAST_WIDTH - hintWidth - PADDING,
+                    TOAST_HEIGHT - font.lineHeight - 2,
+                    0xFF666688, false);
+        }
 
         long elapsed = timeSinceLastVisible - firstRender;
         long displayTime = (long) (ClientConfig.TOAST_DURATION.get() * 1000);

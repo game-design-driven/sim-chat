@@ -26,6 +26,10 @@ public class ClientConfig {
     // Sort mode (0 = recent, 1 = alphabetical)
     public static final ForgeConfigSpec.IntValue SIDEBAR_SORT_MODE;
 
+    // Team settings
+    public static final ForgeConfigSpec.BooleanValue NOTIFY_TEAMMATE_ACTIONS;
+    public static final ForgeConfigSpec.BooleanValue TEAMMATE_ACTION_SOUND;
+
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
@@ -71,6 +75,15 @@ public class ClientConfig {
         SIDEBAR_SORT_MODE = builder
                 .comment("Sort mode for conversation list (0 = Recent, 1 = Alphabetical)")
                 .defineInRange("sidebarSortMode", 0, 0, 1);
+        builder.pop();
+
+        builder.comment("Team Settings").push("team");
+        NOTIFY_TEAMMATE_ACTIONS = builder
+                .comment("Show toast notifications when a teammate clicks an action")
+                .define("notifyTeammateActions", true);
+        TEAMMATE_ACTION_SOUND = builder
+                .comment("Play notification sound when a teammate clicks an action")
+                .define("teammateActionSound", true);
         builder.pop();
 
         SPEC = builder.build();

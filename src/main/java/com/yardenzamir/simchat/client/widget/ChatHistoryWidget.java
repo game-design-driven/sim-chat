@@ -44,6 +44,11 @@ public class ChatHistoryWidget extends AbstractWidget {
     private int scrollOffset = 0;
     private int contentHeight = 0;
 
+    // Tooltip tracking
+    private @Nullable ItemStack hoveredItem = null;
+    private int hoveredItemX = 0;
+    private int hoveredItemY = 0;
+
     public ChatHistoryWidget(Minecraft minecraft, int width, int height, int x, int y) {
         super(x, y, width, height, Component.empty());
         this.minecraft = minecraft;
@@ -130,6 +135,9 @@ public class ChatHistoryWidget extends AbstractWidget {
 
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Reset hovered item tracking
+        hoveredItem = null;
+
         // Enable scissor for clipping
         graphics.enableScissor(getX(), getY(), getX() + width, getY() + height);
 
@@ -162,6 +170,11 @@ public class ChatHistoryWidget extends AbstractWidget {
             int scrollbarY = (int) ((float) scrollOffset / (contentHeight - height) * (height - scrollbarHeight));
             graphics.fill(getX() + width - 4, getY() + scrollbarY,
                     getX() + width - 1, getY() + scrollbarY + scrollbarHeight, 0x80FFFFFF);
+        }
+
+        // Render item tooltip (after scissor disabled so it can extend beyond widget bounds)
+        if (hoveredItem != null) {
+            graphics.renderTooltip(minecraft.font, hoveredItem, hoveredItemX, hoveredItemY);
         }
     }
 
@@ -235,13 +248,21 @@ public class ChatHistoryWidget extends AbstractWidget {
                 int itemsWidth = 0;
                 if (!action.items().isEmpty()) {
                     int itemX = buttonX + 4;
+                    int itemY = buttonY + (BUTTON_HEIGHT - ITEM_ICON_SIZE) / 2;
                     for (ChatAction.ActionItem item : action.items()) {
                         ItemStack stack = item.toItemStack();
                         if (stack != null) {
-                            graphics.renderItem(stack, itemX, buttonY + (BUTTON_HEIGHT - ITEM_ICON_SIZE) / 2);
+                            graphics.renderItem(stack, itemX, itemY);
                             // Render count if > 1
                             if (item.count() > 1) {
-                                graphics.renderItemDecorations(minecraft.font, stack, itemX, buttonY + (BUTTON_HEIGHT - ITEM_ICON_SIZE) / 2);
+                                graphics.renderItemDecorations(minecraft.font, stack, itemX, itemY);
+                            }
+                            // Check if mouse is hovering over this item
+                            if (mouseX >= itemX && mouseX < itemX + ITEM_ICON_SIZE
+                                    && mouseY >= itemY && mouseY < itemY + ITEM_ICON_SIZE) {
+                                hoveredItem = stack;
+                                hoveredItemX = mouseX;
+                                hoveredItemY = mouseY;
                             }
                             itemX += ITEM_ICON_SIZE + 2;
                             itemsWidth += ITEM_ICON_SIZE + 2;

@@ -39,7 +39,7 @@
           },
           "commands": {
             "type": "array",
-            "description": "Commands to execute when clicked (in order). Use 'simchat send @s <namespace>:<path>' to chain dialogues",
+            "description": "Commands to execute when clicked (in order)",
             "items": {
               "type": "string"
             },
@@ -49,27 +49,45 @@
             "type": "string",
             "description": "Player's reply text shown in chat when button is clicked"
           },
-          "items": {
+          "nextState": {
+            "type": "string",
+            "description": "Dialogue resource location to auto-send after this action (e.g., 'mypack:npc/next'). Triggers typing delay then delivers the next dialogue automatically.",
+            "pattern": "^[a-z0-9_.-]+:[a-z0-9_./]+$"
+          },
+          "itemsVisual": {
             "type": "array",
-            "description": "Items to display on the button",
-            "items": {
-              "type": "object",
-              "required": ["id"],
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "description": "Item ID with optional NBT (e.g., 'minecraft:diamond', 'minecraft:diamond{display:{Name:\"Cool\"}}')"
-                },
-                "count": {
-                  "type": "integer",
-                  "description": "Item count",
-                  "minimum": 1,
-                  "maximum": 64,
-                  "default": 1
-                }
-              }
-            }
+            "description": "Items displayed on the button (visual only, gray background)",
+            "items": { "$ref": "#/$defs/itemSpec" }
+          },
+          "itemsInput": {
+            "type": "array",
+            "description": "Items required from player inventory - consumed on click (blue background)",
+            "items": { "$ref": "#/$defs/itemSpec" }
+          },
+          "itemsOutput": {
+            "type": "array",
+            "description": "Items given to player on click (orange background)",
+            "items": { "$ref": "#/$defs/itemSpec" }
           }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "itemSpec": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Item ID with optional NBT (e.g., 'minecraft:diamond', 'minecraft:diamond{display:{Name:\"Cool\"}}')"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Item count",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 1
         }
       }
     }
@@ -83,17 +101,30 @@
       "actions": [
         {
           "label": "I'll take it",
-          "commands": ["simchat send @s mypack:contractor/accept"],
+          "nextState": "mypack:contractor/accept",
           "reply": "Send the specifications.",
-          "items": [
-            {"id": "minecraft:copper_ingot", "count": 64},
-            {"id": "minecraft:redstone", "count": 32}
+          "itemsVisual": [
+            {"id": "minecraft:copper_ingot", "count": 64}
           ]
         },
         {
           "label": "Not interested",
-          "commands": [],
+          "nextState": "mypack:contractor/decline",
           "reply": "Find someone else."
+        }
+      ]
+    },
+    {
+      "entityId": "merchant",
+      "entityName": "Trader Bob",
+      "text": "Want to buy a sword?",
+      "actions": [
+        {
+          "label": "Buy Iron Sword",
+          "reply": "I'll take one.",
+          "itemsInput": [{"id": "minecraft:emerald", "count": 10}],
+          "itemsOutput": [{"id": "minecraft:iron_sword", "count": 1}],
+          "nextState": "mypack:merchant/thanks"
         }
       ]
     }

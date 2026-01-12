@@ -25,6 +25,7 @@ import java.util.List;
  * @param itemsVisual  Items displayed on button (visual only, no functionality)
  * @param itemsInput   Items required from player inventory (consumed on click, blue background)
  * @param itemsOutput  Items given to player on click (orange background)
+ * @param nextState    If present, dialogue resource location to send after this action (e.g., "mypack:npc/next")
  */
 public record ChatAction(
         String label,
@@ -32,7 +33,8 @@ public record ChatAction(
         @Nullable String replyText,
         List<ActionItem> itemsVisual,
         List<ActionItem> itemsInput,
-        List<ActionItem> itemsOutput
+        List<ActionItem> itemsOutput,
+        @Nullable String nextState
 ) {
 
     private static final String TAG_LABEL = "label";
@@ -41,6 +43,7 @@ public record ChatAction(
     private static final String TAG_ITEMS_VISUAL = "itemsVisual";
     private static final String TAG_ITEMS_INPUT = "itemsInput";
     private static final String TAG_ITEMS_OUTPUT = "itemsOutput";
+    private static final String TAG_NEXT_STATE = "nextState";
     private static final String TAG_ITEM = "item";
     private static final String TAG_ITEM_COUNT = "count";
 
@@ -108,6 +111,9 @@ public record ChatAction(
         if (!itemsOutput.isEmpty()) {
             tag.put(TAG_ITEMS_OUTPUT, itemListToNbt(itemsOutput));
         }
+        if (nextState != null) {
+            tag.putString(TAG_NEXT_STATE, nextState);
+        }
 
         return tag;
     }
@@ -143,12 +149,13 @@ public record ChatAction(
         }
 
         String replyText = tag.contains(TAG_REPLY) ? tag.getString(TAG_REPLY) : null;
+        String nextState = tag.contains(TAG_NEXT_STATE) ? tag.getString(TAG_NEXT_STATE) : null;
 
         List<ActionItem> itemsVisual = itemListFromNbt(tag, TAG_ITEMS_VISUAL);
         List<ActionItem> itemsInput = itemListFromNbt(tag, TAG_ITEMS_INPUT);
         List<ActionItem> itemsOutput = itemListFromNbt(tag, TAG_ITEMS_OUTPUT);
 
-        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput);
+        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState);
     }
 
     /**

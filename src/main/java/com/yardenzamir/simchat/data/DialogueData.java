@@ -23,6 +23,7 @@ public record DialogueData(
      * @param itemsVisual Items displayed on button (visual only)
      * @param itemsInput Items required from player inventory (consumed on click)
      * @param itemsOutput Items given to player on click
+     * @param nextState Dialogue resource location to auto-send after this action (e.g., "mypack:npc/next")
      */
     public record DialogueAction(
             String label,
@@ -30,7 +31,8 @@ public record DialogueData(
             @Nullable String reply,
             List<ChatAction.ActionItem> itemsVisual,
             List<ChatAction.ActionItem> itemsInput,
-            List<ChatAction.ActionItem> itemsOutput
+            List<ChatAction.ActionItem> itemsOutput,
+            @Nullable String nextState
     ) {
         private static List<ChatAction.ActionItem> parseItemArray(JsonObject json, String key) {
             List<ChatAction.ActionItem> items = new ArrayList<>();
@@ -59,8 +61,9 @@ public record DialogueData(
             List<ChatAction.ActionItem> itemsVisual = parseItemArray(json, "itemsVisual");
             List<ChatAction.ActionItem> itemsInput = parseItemArray(json, "itemsInput");
             List<ChatAction.ActionItem> itemsOutput = parseItemArray(json, "itemsOutput");
+            String nextState = GsonHelper.getAsString(json, "nextState", null);
 
-            return new DialogueAction(label, commands, reply, itemsVisual, itemsInput, itemsOutput);
+            return new DialogueAction(label, commands, reply, itemsVisual, itemsInput, itemsOutput, nextState);
         }
     }
 
@@ -97,7 +100,7 @@ public record DialogueData(
         List<ChatAction> chatActions = new ArrayList<>();
         for (DialogueAction action : actions) {
             chatActions.add(new ChatAction(action.label(), action.commands(), action.reply(),
-                    action.itemsVisual(), action.itemsInput(), action.itemsOutput()));
+                    action.itemsVisual(), action.itemsInput(), action.itemsOutput(), action.nextState()));
         }
         return ChatMessage.fromEntity(resolvedEntityId, resolvedName, resolvedSubtitle, resolvedAvatar, text, worldDay, chatActions);
     }

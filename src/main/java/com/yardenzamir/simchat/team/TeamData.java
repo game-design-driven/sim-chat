@@ -488,6 +488,9 @@ public class TeamData {
         if (!action.itemsOutput().isEmpty()) {
             json.add("itemsOutput", actionItemsToJson(action.itemsOutput()));
         }
+        if (action.nextState() != null) {
+            json.addProperty("nextState", action.nextState());
+        }
         return json;
     }
 
@@ -512,6 +515,9 @@ public class TeamData {
         }
         if (json.has("itemsOutput")) {
             tag.put("itemsOutput", actionItemsFromJson(GsonHelper.getAsJsonArray(json, "itemsOutput")));
+        }
+        if (json.has("nextState")) {
+            tag.putString("nextState", GsonHelper.getAsString(json, "nextState"));
         }
         return tag;
     }

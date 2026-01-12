@@ -1,11 +1,16 @@
 package com.yardenzamir.simchat.network;
 
 import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.command.DelayedMessageScheduler;
+import com.yardenzamir.simchat.config.ServerConfig;
 import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.data.DialogueData;
+import com.yardenzamir.simchat.data.DialogueManager;
 import com.yardenzamir.simchat.team.SimChatTeamManager;
 import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -156,6 +161,23 @@ public class ActionClickPacket {
             // Sync to ALL team members
             NetworkHandler.syncTeamToAllMembers(team, player.server);
 
+            // Trigger next dialogue state if specified
+            if (action.nextState() != null && !action.nextState().isEmpty()) {
+                ResourceLocation nextStateId = ResourceLocation.tryParse(action.nextState());
+                if (nextStateId != null) {
+                    DialogueData nextDialogue = DialogueManager.get(nextStateId);
+                    if (nextDialogue != null) {
+                        ChatMessage nextMessage = nextDialogue.toMessage(nextDialogue.entityId(), worldDay);
+                        int delayTicks = calculateDelayTicks(nextDialogue.text());
+                        DelayedMessageScheduler.schedule(player, nextMessage, delayTicks);
+                    } else {
+                        SimChatMod.LOGGER.warn("nextState dialogue not found: {}", action.nextState());
+                    }
+                } else {
+                    SimChatMod.LOGGER.warn("Invalid nextState resource location: {}", action.nextState());
+                }
+            }
+
             // Execute commands
             for (String command : action.commands()) {
                 if (!command.isEmpty()) {
@@ -171,5 +193,18 @@ public class ActionClickPacket {
             }
         });
         ctx.get().setPacketHandled(true);
+    }
+
+    /**
+     * Calculates typing delay in ticks based on text length and config.
+     */
+    private static int calculateDelayTicks(String text) {
+        float charsPerSecond = ServerConfig.TYPING_CHARS_PER_SECOND.get().floatValue();
+        float minDelay = ServerConfig.TYPING_DELAY_MIN.get().floatValue();
+        float maxDelay = ServerConfig.TYPING_DELAY_MAX.get().floatValue();
+
+        float seconds = text.length() / charsPerSecond;
+        float delay = Math.max(minDelay, Math.min(maxDelay, seconds));
+        return (int) (delay * 20);
     }
 }

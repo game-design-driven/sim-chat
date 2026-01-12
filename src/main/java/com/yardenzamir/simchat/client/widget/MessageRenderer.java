@@ -2,13 +2,12 @@ package com.yardenzamir.simchat.client.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.yardenzamir.simchat.client.AvatarManager;
+import com.yardenzamir.simchat.client.PlayerSkinCache;
 import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -48,7 +47,8 @@ public final class MessageRenderer {
         graphics.drawString(mc.font, message.senderName(), textX, textY, nameColor);
         int nextX = textX + mc.font.width(message.senderName());
 
-        if (!message.isPlayerMessage() && message.senderSubtitle() != null) {
+        // Show subtitle (entity subtitle or team title for player messages)
+        if (message.senderSubtitle() != null) {
             String subtitle = " - " + message.senderSubtitle();
             graphics.drawString(mc.font, subtitle, nextX, textY, SUBTITLE_COLOR);
             nextX += mc.font.width(subtitle);
@@ -68,15 +68,24 @@ public final class MessageRenderer {
             textY += mc.font.lineHeight + 2;
         }
 
-        // Action buttons
+        // Action buttons (with wrapping)
         if (!message.actions().isEmpty()) {
             int buttonX = textX;
             int buttonY = textY + BUTTON_PADDING;
+            int maxButtonX = textX + textWidth;
 
             for (ChatAction action : message.actions()) {
+                int buttonWidth = ActionButtonRenderer.calculateWidth(mc, action);
+
+                // Wrap to next row if button doesn't fit
+                if (buttonX + buttonWidth > maxButtonX && buttonX > textX) {
+                    buttonX = textX;
+                    buttonY += BUTTON_HEIGHT + BUTTON_PADDING;
+                }
+
                 ActionButtonRenderer.render(graphics, mc, action, buttonX, buttonY,
                         mouseX, mouseY, hoverState);
-                buttonX += ActionButtonRenderer.calculateWidth(mc, action) + BUTTON_PADDING;
+                buttonX += buttonWidth + BUTTON_PADDING;
             }
         }
     }
@@ -183,10 +192,34 @@ public final class MessageRenderer {
 
         int buttonRowHeight = 0;
         if (!message.actions().isEmpty()) {
-            buttonRowHeight = BUTTON_HEIGHT + BUTTON_PADDING;
+            int buttonRows = calculateButtonRows(mc, message.actions(), textWidth);
+            buttonRowHeight = buttonRows * (BUTTON_HEIGHT + BUTTON_PADDING);
         }
 
         return Math.max(AVATAR_SIZE, mc.font.lineHeight + 2 + textHeight + buttonRowHeight) + MESSAGE_PADDING;
+    }
+
+    /**
+     * Calculates number of rows needed for action buttons given available width.
+     */
+    public static int calculateButtonRows(Minecraft mc, List<ChatAction> actions, int maxWidth) {
+        if (actions.isEmpty()) return 0;
+
+        int rows = 1;
+        int currentX = 0;
+
+        for (ChatAction action : actions) {
+            int buttonWidth = ActionButtonRenderer.calculateWidth(mc, action);
+
+            if (currentX + buttonWidth > maxWidth && currentX > 0) {
+                rows++;
+                currentX = 0;
+            }
+
+            currentX += buttonWidth + BUTTON_PADDING;
+        }
+
+        return rows;
     }
 
     /**
@@ -218,30 +251,19 @@ public final class MessageRenderer {
 
     private static void renderAvatar(GuiGraphics graphics, Minecraft mc, ChatMessage message, int x, int y) {
         if (message.isPlayerMessage()) {
-            ResourceLocation skinTexture = getPlayerSkinTexture(mc);
+            ResourceLocation skinTexture = PlayerSkinCache.getSkin(message.playerUuid());
+            // Render player head from skin texture
+            // Face layer: 8x8 pixels at UV (8,8) in 64x64 texture
             RenderSystem.enableBlend();
-            graphics.blit(skinTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 8.0f, 8.0f, 8, 8, 64, 64);
-            graphics.blit(skinTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 40.0f, 8.0f, 8, 8, 64, 64);
+            RenderSystem.defaultBlendFunc();
+            graphics.blit(skinTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 8, 8, 8, 8, 64, 64);
+            // Hat layer: 8x8 pixels at UV (40,8) - overlay with transparency
+            graphics.blit(skinTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 40, 8, 8, 8, 64, 64);
+            RenderSystem.disableBlend();
         } else {
             ResourceLocation avatarTexture = AvatarManager.getTexture(message.senderImageId());
             graphics.blit(avatarTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 0, 0, 256, 256, 256, 256);
         }
-    }
-
-    private static ResourceLocation getPlayerSkinTexture(Minecraft mc) {
-        if (mc.player == null) {
-            return DefaultPlayerSkin.getDefaultSkin();
-        }
-
-        PlayerInfo playerInfo = mc.getConnection() != null
-                ? mc.getConnection().getPlayerInfo(mc.player.getUUID())
-                : null;
-
-        if (playerInfo != null) {
-            return playerInfo.getSkinLocation();
-        }
-
-        return DefaultPlayerSkin.getDefaultSkin(mc.player.getUUID());
     }
 
     private static int calculateTransactionItemsWidth(List<ChatAction.ActionItem> items) {

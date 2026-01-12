@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.yardenzamir.simchat.SimChatMod;
+import net.minecraft.util.GsonHelper;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.jetbrains.annotations.Nullable;
 
@@ -34,9 +35,9 @@ public class EntityConfigManager {
             @Nullable String avatar
     ) {
         public static EntityConfig fromJson(JsonObject json) {
-            String name = json.has("name") ? json.get("name").getAsString() : null;
-            String subtitle = json.has("subtitle") ? json.get("subtitle").getAsString() : null;
-            String avatar = json.has("avatar") ? json.get("avatar").getAsString() : null;
+            String name = GsonHelper.getAsString(json, "name", null);
+            String subtitle = GsonHelper.getAsString(json, "subtitle", null);
+            String avatar = GsonHelper.getAsString(json, "avatar", null);
             return new EntityConfig(name, subtitle, avatar);
         }
     }

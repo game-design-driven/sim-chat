@@ -1,12 +1,14 @@
 package com.yardenzamir.simchat.data;
 
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.minecraft.commands.arguments.item.ItemParser;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -26,33 +28,42 @@ public record ChatAction(String label, List<String> commands, @Nullable String r
     private static final String TAG_COMMANDS = "commands";
     private static final String TAG_REPLY = "reply";
     private static final String TAG_ITEMS = "items";
-    private static final String TAG_ITEM_ID = "id";
+    private static final String TAG_ITEM = "item";
     private static final String TAG_ITEM_COUNT = "count";
 
     /**
      * Item to display on an action button.
+     * @param item Full item string with optional NBT (e.g., "minecraft:diamond{display:{Name:'\"Custom\"'}}")
+     * @param count Item count
      */
-    public record ActionItem(String itemId, int count) {
+    public record ActionItem(String item, int count) {
         public CompoundTag toNbt() {
             CompoundTag tag = new CompoundTag();
-            tag.putString(TAG_ITEM_ID, itemId);
+            tag.putString(TAG_ITEM, item);
             tag.putInt(TAG_ITEM_COUNT, count);
             return tag;
         }
 
         public static ActionItem fromNbt(CompoundTag tag) {
-            return new ActionItem(
-                    tag.getString(TAG_ITEM_ID),
-                    tag.getInt(TAG_ITEM_COUNT)
-            );
+            // Support legacy format with "id" field
+            String item = tag.contains(TAG_ITEM) ? tag.getString(TAG_ITEM) : tag.getString("id");
+            return new ActionItem(item, tag.getInt(TAG_ITEM_COUNT));
         }
 
         public @Nullable ItemStack toItemStack() {
-            ResourceLocation loc = ResourceLocation.tryParse(itemId);
-            if (loc == null) return null;
-            var item = ForgeRegistries.ITEMS.getValue(loc);
-            if (item == null) return null;
-            return new ItemStack(item, count);
+            try {
+                ItemParser.ItemResult result = ItemParser.parseForItem(
+                        BuiltInRegistries.ITEM.asLookup(),
+                        new StringReader(item)
+                );
+                ItemStack stack = new ItemStack(result.item(), count);
+                if (result.nbt() != null) {
+                    stack.setTag(result.nbt());
+                }
+                return stack;
+            } catch (CommandSyntaxException e) {
+                return null;
+            }
         }
     }
 

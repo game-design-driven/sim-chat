@@ -1,11 +1,13 @@
 package com.yardenzamir.simchat.data;
 
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import net.minecraft.resources.ResourceLocation;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.minecraft.commands.arguments.item.ItemParser;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -33,41 +35,51 @@ public record DialogueData(
     ) {
         /**
          * Item to display on an action button.
+         * @param item Full item string with optional NBT (e.g., "minecraft:diamond{display:{Name:'\"Custom\"'}}")
+         * @param count Item count (applied after parsing)
          */
-        public record ActionItem(String itemId, int count) {
+        public record ActionItem(String item, int count) {
             public static ActionItem fromJson(JsonObject json) {
-                String id = json.get("id").getAsString();
-                int count = json.has("count") ? json.get("count").getAsInt() : 1;
-                return new ActionItem(id, count);
+                String item = GsonHelper.getAsString(json, "id");
+                int count = GsonHelper.getAsInt(json, "count", 1);
+                return new ActionItem(item, count);
             }
 
             public @Nullable ItemStack toItemStack() {
-                ResourceLocation loc = ResourceLocation.tryParse(itemId);
-                if (loc == null) return null;
-                var item = ForgeRegistries.ITEMS.getValue(loc);
-                if (item == null) return null;
-                return new ItemStack(item, count);
+                try {
+                    ItemParser.ItemResult result = ItemParser.parseForItem(
+                            BuiltInRegistries.ITEM.asLookup(),
+                            new StringReader(item)
+                    );
+                    ItemStack stack = new ItemStack(result.item(), count);
+                    if (result.nbt() != null) {
+                        stack.setTag(result.nbt());
+                    }
+                    return stack;
+                } catch (CommandSyntaxException e) {
+                    return null;
+                }
             }
         }
 
         public static DialogueAction fromJson(JsonObject json) {
-            String label = json.get("label").getAsString();
+            String label = GsonHelper.getAsString(json, "label");
 
             List<String> commands = new ArrayList<>();
             if (json.has("commands")) {
-                JsonArray arr = json.getAsJsonArray("commands");
-                for (JsonElement el : arr) {
-                    commands.add(el.getAsString());
+                JsonArray arr = GsonHelper.getAsJsonArray(json, "commands");
+                for (int i = 0; i < arr.size(); i++) {
+                    commands.add(arr.get(i).getAsString());
                 }
             }
 
-            String reply = json.has("reply") ? json.get("reply").getAsString() : null;
+            String reply = GsonHelper.getAsString(json, "reply", null);
 
             List<ActionItem> items = new ArrayList<>();
             if (json.has("items")) {
-                JsonArray arr = json.getAsJsonArray("items");
-                for (JsonElement el : arr) {
-                    items.add(ActionItem.fromJson(el.getAsJsonObject()));
+                JsonArray arr = GsonHelper.getAsJsonArray(json, "items");
+                for (int i = 0; i < arr.size(); i++) {
+                    items.add(ActionItem.fromJson(arr.get(i).getAsJsonObject()));
                 }
             }
 
@@ -76,18 +88,16 @@ public record DialogueData(
     }
 
     public static DialogueData fromJson(JsonObject json) {
-        String entityId = json.get("entityId").getAsString();
-        String entityName = json.get("entityName").getAsString();
-        String entitySubtitle = json.has("entitySubtitle")
-                ? json.get("entitySubtitle").getAsString()
-                : null;
-        String text = json.get("text").getAsString();
+        String entityId = GsonHelper.getAsString(json, "entityId");
+        String entityName = GsonHelper.getAsString(json, "entityName");
+        String entitySubtitle = GsonHelper.getAsString(json, "entitySubtitle", null);
+        String text = GsonHelper.getAsString(json, "text");
 
         List<DialogueAction> actions = new ArrayList<>();
         if (json.has("actions")) {
-            JsonArray actionsArray = json.getAsJsonArray("actions");
-            for (JsonElement element : actionsArray) {
-                actions.add(DialogueAction.fromJson(element.getAsJsonObject()));
+            JsonArray actionsArray = GsonHelper.getAsJsonArray(json, "actions");
+            for (int i = 0; i < actionsArray.size(); i++) {
+                actions.add(DialogueAction.fromJson(actionsArray.get(i).getAsJsonObject()));
             }
         }
 
@@ -111,7 +121,7 @@ public record DialogueData(
         for (DialogueAction action : actions) {
             List<ChatAction.ActionItem> chatItems = new ArrayList<>();
             for (DialogueAction.ActionItem item : action.items()) {
-                chatItems.add(new ChatAction.ActionItem(item.itemId(), item.count()));
+                chatItems.add(new ChatAction.ActionItem(item.item(), item.count()));
             }
             chatActions.add(new ChatAction(action.label(), action.commands(), action.reply(), chatItems));
         }

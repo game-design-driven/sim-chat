@@ -23,6 +23,9 @@ public class ClientConfig {
     public static final ForgeConfigSpec.IntValue MESSAGE_PADDING;
     public static final ForgeConfigSpec.IntValue ENTITY_LIST_ITEM_HEIGHT;
 
+    // Sort mode (0 = recent, 1 = alphabetical)
+    public static final ForgeConfigSpec.IntValue SIDEBAR_SORT_MODE;
+
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
@@ -65,6 +68,9 @@ public class ClientConfig {
         ENTITY_LIST_ITEM_HEIGHT = builder
                 .comment("Height of each entity in the sidebar list (pixels)")
                 .defineInRange("entityListItemHeight", 48, 32, 80);
+        SIDEBAR_SORT_MODE = builder
+                .comment("Sort mode for conversation list (0 = Recent, 1 = Alphabetical)")
+                .defineInRange("sidebarSortMode", 0, 0, 1);
         builder.pop();
 
         SPEC = builder.build();

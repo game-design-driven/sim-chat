@@ -1,6 +1,7 @@
 package com.yardenzamir.simchat.client.screen;
 
 import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.client.SortMode;
 import com.yardenzamir.simchat.client.widget.ChatHistoryWidget;
 import com.yardenzamir.simchat.client.widget.EntityListWidget;
 import com.yardenzamir.simchat.config.ClientConfig;
@@ -12,6 +13,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -35,6 +38,9 @@ public class ChatScreen extends Screen {
     private boolean draggingDivider = false;
     private boolean hoveringDivider = false;
 
+    private SortMode sortMode;
+    private @Nullable PlayerChatData cachedData;
+
     public ChatScreen(@Nullable String initialEntityId) {
         super(Component.literal("SimChat"));
         this.selectedEntityId = initialEntityId;
@@ -45,6 +51,7 @@ public class ChatScreen extends Screen {
         super.init();
 
         sidebarWidth = ClientConfig.SIDEBAR_WIDTH.get();
+        sortMode = SortMode.fromId(ClientConfig.SIDEBAR_SORT_MODE.get());
         clampSidebarWidth();
 
         rebuildLayout();
@@ -99,7 +106,7 @@ public class ChatScreen extends Screen {
                 entityList.setEntities(data, data.getEntityIds());
                 if (selectedEntityId != null) {
                     entityList.setSelected(selectedEntityId);
-                    chatHistory.setMessages(data.getMessages(selectedEntityId), selectedEntityId);
+                    chatHistory.updateMessages(data.getMessages(selectedEntityId), selectedEntityId);
                     chatHistory.setTyping(
                             data.isTyping(selectedEntityId),
                             data.getEntityDisplayName(selectedEntityId),
@@ -114,10 +121,27 @@ public class ChatScreen extends Screen {
         if (minecraft == null || minecraft.player == null) return;
 
         ChatCapability.get(minecraft.player).ifPresent(data -> {
+            cachedData = data;
             lastRevision = data.getRevision();
-            List<String> entityIds = data.getEntityIds();
+            List<String> entityIds = sortEntityIds(data, data.getEntityIds());
             entityList.setEntities(data, entityIds);
         });
+    }
+
+    private List<String> sortEntityIds(PlayerChatData data, List<String> entityIds) {
+        if (sortMode == SortMode.ALPHABETICAL) {
+            List<String> sorted = new ArrayList<>(entityIds);
+            sorted.sort(Comparator.comparing(id -> data.getEntityDisplayName(id).toLowerCase()));
+            return sorted;
+        }
+        // RECENT mode - already sorted by most recent
+        return entityIds;
+    }
+
+    private void toggleSortMode() {
+        sortMode = sortMode.next();
+        ClientConfig.SIDEBAR_SORT_MODE.set(sortMode.getId());
+        refreshAll();
     }
 
     private void selectFirstEntity() {
@@ -141,12 +165,22 @@ public class ChatScreen extends Screen {
 
         if (minecraft != null && minecraft.player != null) {
             ChatCapability.get(minecraft.player).ifPresent(data -> {
+                // Get read count before marking as read (for scroll to unread)
+                int readCount = data.getReadCount(entityId);
+
+                // Set messages with scroll to first unread
+                chatHistory.setMessages(data.getMessages(entityId), entityId, readCount);
+                chatHistory.setTyping(
+                        data.isTyping(entityId),
+                        data.getEntityDisplayName(entityId),
+                        data.getEntityImageId(entityId)
+                );
+
+                // Mark as read after setting messages
                 data.markAsRead(entityId);
             });
             NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(entityId));
         }
-
-        refreshChatHistory();
     }
 
     private void refreshChatHistory() {
@@ -156,7 +190,8 @@ public class ChatScreen extends Screen {
         }
 
         ChatCapability.get(minecraft.player).ifPresent(data -> {
-            chatHistory.setMessages(data.getMessages(selectedEntityId), selectedEntityId);
+            // Preserve scroll position during refresh
+            chatHistory.updateMessages(data.getMessages(selectedEntityId), selectedEntityId);
             chatHistory.setTyping(
                     data.isTyping(selectedEntityId),
                     data.getEntityDisplayName(selectedEntityId),
@@ -201,7 +236,7 @@ public class ChatScreen extends Screen {
                 }
             });
         } else {
-            String emptyText = "Select a conversation";
+            Component emptyText = Component.translatable("simchat.screen.select_conversation");
             int textWidth = font.width(emptyText);
             int centerX = sidebarWidth + (width - sidebarWidth) / 2;
             int centerY = height / 2;
@@ -211,11 +246,29 @@ public class ChatScreen extends Screen {
         // Header separator
         graphics.fill(sidebarWidth, HEADER_HEIGHT, width, HEADER_HEIGHT + 1, 0xFF3d3d5c);
 
+        // Sort button at bottom of sidebar
+        if (!isCompactMode()) {
+            Component sortText = sortMode.getDisplayName();
+            int sortTextWidth = font.width(sortText);
+            int sortButtonX = PADDING;
+            int sortButtonY = height - PADDING - font.lineHeight - 4;
+            int sortButtonWidth = sidebarWidth - PADDING * 2 - DIVIDER_WIDTH;
+
+            // Button background
+            boolean sortHovered = mouseX >= sortButtonX && mouseX < sortButtonX + sortButtonWidth
+                    && mouseY >= sortButtonY && mouseY < sortButtonY + font.lineHeight + 4;
+            int buttonBg = sortHovered ? 0xFF404060 : 0xFF303050;
+            graphics.fill(sortButtonX, sortButtonY, sortButtonX + sortButtonWidth, sortButtonY + font.lineHeight + 4, buttonBg);
+
+            // Button text centered
+            graphics.drawString(font, sortText, sortButtonX + (sortButtonWidth - sortTextWidth) / 2, sortButtonY + 2, 0xFFCCCCCC);
+        }
+
         // Empty state for sidebar
         if (minecraft != null && minecraft.player != null) {
             ChatCapability.get(minecraft.player).ifPresent(data -> {
                 if (!data.hasConversations()) {
-                    String emptyText = "No messages yet";
+                    Component emptyText = Component.translatable("simchat.screen.no_messages");
                     int emptyTextWidth = font.width(emptyText);
                     graphics.drawString(font, emptyText,
                             (sidebarWidth - emptyTextWidth) / 2,
@@ -234,6 +287,21 @@ public class ChatScreen extends Screen {
             draggingDivider = true;
             return true;
         }
+
+        // Check sort button click
+        if (button == 0 && !isCompactMode()) {
+            int sortButtonX = PADDING;
+            int sortButtonY = height - PADDING - font.lineHeight - 4;
+            int sortButtonWidth = sidebarWidth - PADDING * 2 - DIVIDER_WIDTH;
+            int sortButtonHeight = font.lineHeight + 4;
+
+            if (mouseX >= sortButtonX && mouseX < sortButtonX + sortButtonWidth
+                    && mouseY >= sortButtonY && mouseY < sortButtonY + sortButtonHeight) {
+                toggleSortMode();
+                return true;
+            }
+        }
+
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
@@ -283,6 +351,7 @@ public class ChatScreen extends Screen {
 
         if (minecraft != null && minecraft.player != null) {
             ChatCapability.get(minecraft.player).ifPresent(data -> {
+                cachedData = data;
                 if (data.getRevision() != lastRevision) {
                     if (selectedEntityId != null) {
                         data.markAsRead(selectedEntityId);
@@ -291,7 +360,7 @@ public class ChatScreen extends Screen {
 
                     lastRevision = data.getRevision();
 
-                    List<String> entityIds = data.getEntityIds();
+                    List<String> entityIds = sortEntityIds(data, data.getEntityIds());
                     entityList.setEntities(data, entityIds);
                     refreshChatHistory();
                 }

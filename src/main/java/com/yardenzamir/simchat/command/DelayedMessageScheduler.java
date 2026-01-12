@@ -11,10 +11,9 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.server.ServerLifecycleHooks;
 
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Schedules delayed message delivery with typing indicator.
@@ -23,7 +22,9 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = SimChatMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class DelayedMessageScheduler {
 
-    private static final List<PendingMessage> pendingMessages = new ArrayList<>();
+    // CopyOnWriteArrayList to avoid ConcurrentModificationException when commands schedule
+    // new messages while tick handler is iterating
+    private static final List<PendingMessage> pendingMessages = new CopyOnWriteArrayList<>();
 
     public static void schedule(ServerPlayer player, ChatMessage message, int delayTicks) {
         NetworkHandler.sendTyping(player, message.entityId(), true);
@@ -37,21 +38,22 @@ public class DelayedMessageScheduler {
         var server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
 
-        Iterator<PendingMessage> iterator = pendingMessages.iterator();
-        while (iterator.hasNext()) {
-            PendingMessage pending = iterator.next();
+        // Decrement timers and collect ready messages
+        for (PendingMessage pending : pendingMessages) {
             pending.ticksRemaining--;
+        }
 
+        // Remove and deliver ready messages (CopyOnWriteArrayList safe removal)
+        pendingMessages.removeIf(pending -> {
             if (pending.ticksRemaining <= 0) {
-                iterator.remove();
                 ServerPlayer player = server.getPlayerList().getPlayer(pending.playerUuid);
                 if (player != null) {
                     deliverMessage(player, pending.message);
                 }
-                // If player offline, message is lost - but this won't happen
-                // because onPlayerLogout delivers all pending first
+                return true;
             }
-        }
+            return false;
+        });
     }
 
     @SubscribeEvent
@@ -59,17 +61,16 @@ public class DelayedMessageScheduler {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
         UUID uuid = player.getUUID();
-        Iterator<PendingMessage> iterator = pendingMessages.iterator();
-        while (iterator.hasNext()) {
-            PendingMessage pending = iterator.next();
+        pendingMessages.removeIf(pending -> {
             if (pending.playerUuid.equals(uuid)) {
-                iterator.remove();
                 // Deliver immediately to capability (will be saved)
                 ChatCapability.get(player).ifPresent(data -> {
                     data.addMessage(pending.message);
                 });
+                return true;
             }
-        }
+            return false;
+        });
     }
 
     private static void deliverMessage(ServerPlayer player, ChatMessage message) {

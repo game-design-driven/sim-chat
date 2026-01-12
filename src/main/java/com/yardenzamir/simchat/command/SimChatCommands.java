@@ -41,6 +41,12 @@ public class SimChatCommands {
                                 .then(Commands.argument("dialogue_id", ResourceLocationArgument.id())
                                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggestResource(DialogueManager.getDialogueIds(), builder))
                                         .executes(SimChatCommands::sendDialogue))))
+                // system <player> <entity_id> <message> - send a system message
+                .then(Commands.literal("system")
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .then(Commands.argument("entity_id", StringArgumentType.word())
+                                        .then(Commands.argument("message", StringArgumentType.greedyString())
+                                                .executes(SimChatCommands::sendSystemMessage)))))
                 // clear <player> [entity_id]
                 .then(Commands.literal("clear")
                         .then(Commands.argument("player", EntityArgument.player())
@@ -92,6 +98,22 @@ public class SimChatCommands {
         DelayedMessageScheduler.schedule(player, message, delayTicks);
 
         ctx.getSource().sendSuccess(() -> Component.literal("Sending dialogue " + dialogueId + " to " + player.getName().getString()), false);
+        return 1;
+    }
+
+    private static int sendSystemMessage(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
+        String entityId = StringArgumentType.getString(ctx, "entity_id");
+        String messageText = StringArgumentType.getString(ctx, "message");
+
+        long worldDay = getWorldDay(player);
+        ChatMessage message = ChatMessage.systemMessage(entityId, messageText, worldDay);
+
+        ChatCapability.get(player).ifPresent(data -> {
+            data.addMessage(message);
+            NetworkHandler.syncToPlayer(player);
+        });
+
         return 1;
     }
 

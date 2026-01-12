@@ -1,0 +1,57 @@
+package com.yardenzamir.simchat.client.widget;
+
+/**
+ * Constants for ChatHistoryWidget rendering.
+ */
+public final class ChatHistoryConstants {
+    private ChatHistoryConstants() {}
+
+    // Layout sizes
+    public static final int AVATAR_SIZE = 32;
+    public static final int MESSAGE_PADDING = 8;
+    public static final int BUTTON_HEIGHT = 20;
+    public static final int BUTTON_PADDING = 4;
+    public static final int ITEM_ICON_SIZE = 16;
+    public static final int ITEM_BG_PADDING = 2;
+    public static final int ITEM_SPACING = 2;
+    public static final int TYPING_INDICATOR_HEIGHT = 32;
+    public static final int SYSTEM_MESSAGE_HEIGHT = 20;
+
+    // Scrollbar
+    public static final int SCROLLBAR_WIDTH = 3;
+    public static final int SCROLLBAR_MIN_HEIGHT = 20;
+    public static final int SCROLLBAR_COLOR = 0x80FFFFFF;
+    public static final int SCROLL_SPEED = 20;
+
+    // Button layout
+    public static final int BUTTON_INTERNAL_PADDING = 4;
+    public static final int BUTTON_BASE_WIDTH_PADDING = 16;
+
+    // Item background colors
+    public static final int INPUT_BG_COLOR = 0xFF0968B6;
+    public static final int OUTPUT_BG_COLOR = 0xFFCE640B;
+    public static final int DISABLED_BG_COLOR = 0xFF404040;
+
+    // Text colors
+    public static final int PLAYER_NAME_COLOR = 0xFF88FF88;
+    public static final int ENTITY_NAME_COLOR = 0xFF88AAFF;
+    public static final int SUBTITLE_COLOR = 0xFF888888;
+    public static final int DAY_TEXT_COLOR = 0xFF666666;
+    public static final int MESSAGE_TEXT_COLOR = 0xFFE0E0E0;
+    public static final int DISABLED_TEXT_COLOR = 0xFF808080;
+    public static final int WHITE_TEXT_COLOR = 0xFFFFFFFF;
+    public static final int SYSTEM_TEXT_COLOR = 0xFF888888;
+
+    // Button colors
+    public static final int BUTTON_DEFAULT_COLOR = 0xFF304080;
+    public static final int BUTTON_HOVER_COLOR = 0xFF4060A0;
+    public static final int BORDER_DISABLED_COLOR = 0xFF606060;
+    public static final int BORDER_HOVER_COLOR = 0xFF6080C0;
+    public static final int BORDER_DEFAULT_COLOR = 0xFF405090;
+
+    // Color manipulation
+    public static final int BRIGHTEN_AMOUNT = 40;
+
+    // Inventory
+    public static final int MAIN_INVENTORY_SIZE = 36;
+}

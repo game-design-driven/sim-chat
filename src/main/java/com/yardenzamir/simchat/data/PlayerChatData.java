@@ -61,7 +61,9 @@ public class PlayerChatData {
      * Gets entity IDs for all conversations, ordered by most recent message.
      */
     public List<String> getEntityIds() {
-        List<Map.Entry<String, List<ChatMessage>>> entries = new ArrayList<>(conversations.entrySet());
+        // Copy to avoid ConcurrentModificationException if events modify during iteration
+        Map<String, List<ChatMessage>> snapshot = new LinkedHashMap<>(conversations);
+        List<Map.Entry<String, List<ChatMessage>>> entries = new ArrayList<>(snapshot.entrySet());
 
         entries.sort((a, b) -> {
             long timeA = a.getValue().isEmpty() ? 0 : a.getValue().get(a.getValue().size() - 1).timestamp();
@@ -185,6 +187,13 @@ public class PlayerChatData {
     }
 
     /**
+     * Gets the read message count for an entity (index of first unread).
+     */
+    public int getReadCount(String entityId) {
+        return readMessageCounts.getOrDefault(entityId, 0);
+    }
+
+    /**
      * Marks all messages for an entity as read.
      */
     public void markAsRead(String entityId) {
@@ -245,12 +254,15 @@ public class PlayerChatData {
         CompoundTag root = new CompoundTag();
         ListTag convList = new ListTag();
 
-        for (Map.Entry<String, List<ChatMessage>> entry : conversations.entrySet()) {
+        // Copy to avoid ConcurrentModificationException if events modify during iteration
+        Map<String, List<ChatMessage>> snapshot = new LinkedHashMap<>(conversations);
+        for (Map.Entry<String, List<ChatMessage>> entry : snapshot.entrySet()) {
             CompoundTag convTag = new CompoundTag();
             convTag.putString(TAG_ENTITY_ID, entry.getKey());
 
             ListTag messageList = new ListTag();
-            for (ChatMessage msg : entry.getValue()) {
+            List<ChatMessage> messages = new ArrayList<>(entry.getValue());
+            for (ChatMessage msg : messages) {
                 messageList.add(msg.toNbt());
             }
             convTag.put(TAG_MESSAGES, messageList);
@@ -261,7 +273,8 @@ public class PlayerChatData {
 
         // Save read counts
         ListTag readList = new ListTag();
-        for (Map.Entry<String, Integer> entry : readMessageCounts.entrySet()) {
+        Map<String, Integer> readSnapshot = new HashMap<>(readMessageCounts);
+        for (Map.Entry<String, Integer> entry : readSnapshot.entrySet()) {
             CompoundTag readTag = new CompoundTag();
             readTag.putString(TAG_ENTITY_ID, entry.getKey());
             readTag.putInt(TAG_COUNT, entry.getValue());

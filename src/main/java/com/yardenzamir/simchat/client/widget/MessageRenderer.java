@@ -1,0 +1,285 @@
+package com.yardenzamir.simchat.client.widget;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.yardenzamir.simchat.client.AvatarManager;
+import com.yardenzamir.simchat.config.ClientConfig;
+import com.yardenzamir.simchat.data.ChatAction;
+import com.yardenzamir.simchat.data.ChatMessage;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
+
+/**
+ * Renders chat messages including avatars, text, and action buttons.
+ */
+public final class MessageRenderer {
+    private MessageRenderer() {}
+
+    /**
+     * Renders a chat message.
+     */
+    public static void render(GuiGraphics graphics, Minecraft mc, ChatMessage message,
+                              int index, int x, int y, int width,
+                              int mouseX, int mouseY, boolean isHovered,
+                              HoverState hoverState) {
+        if (message.isSystemMessage()) {
+            renderSystemMessage(graphics, mc, message, x, y, width, mouseX, mouseY, hoverState);
+            return;
+        }
+
+        // Avatar
+        renderAvatar(graphics, mc, message, x, y);
+
+        int textX = x + AVATAR_SIZE + MESSAGE_PADDING;
+        int textY = y;
+        int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
+
+        // Sender name with subtitle
+        int nameColor = message.isPlayerMessage() ? PLAYER_NAME_COLOR : ENTITY_NAME_COLOR;
+        graphics.drawString(mc.font, message.senderName(), textX, textY, nameColor);
+        int nextX = textX + mc.font.width(message.senderName());
+
+        if (!message.isPlayerMessage() && message.senderSubtitle() != null) {
+            String subtitle = " - " + message.senderSubtitle();
+            graphics.drawString(mc.font, subtitle, nextX, textY, SUBTITLE_COLOR);
+            nextX += mc.font.width(subtitle);
+        }
+
+        // Show day on hover
+        if (isHovered) {
+            String dayText = "  " + Component.translatable("simchat.chat.day", message.worldDay()).getString();
+            graphics.drawString(mc.font, dayText, nextX, textY, DAY_TEXT_COLOR);
+        }
+        textY += mc.font.lineHeight + 2;
+
+        // Message content
+        List<String> wrappedLines = wrapText(mc, message.content(), textWidth);
+        for (String line : wrappedLines) {
+            graphics.drawString(mc.font, line, textX, textY, MESSAGE_TEXT_COLOR);
+            textY += mc.font.lineHeight + 2;
+        }
+
+        // Action buttons
+        if (!message.actions().isEmpty()) {
+            int buttonX = textX;
+            int buttonY = textY + BUTTON_PADDING;
+
+            for (ChatAction action : message.actions()) {
+                ActionButtonRenderer.render(graphics, mc, action, buttonX, buttonY,
+                        mouseX, mouseY, hoverState);
+                buttonX += ActionButtonRenderer.calculateWidth(mc, action) + BUTTON_PADDING;
+            }
+        }
+    }
+
+    /**
+     * Renders a system message (transactions, etc).
+     */
+    public static void renderSystemMessage(GuiGraphics graphics, Minecraft mc,
+                                           ChatMessage message, int x, int y, int width,
+                                           int mouseX, int mouseY, HoverState hoverState) {
+        int contentWidth = width - MESSAGE_PADDING * 2;
+        int centerY = y + (SYSTEM_MESSAGE_HEIGHT - ITEM_ICON_SIZE) / 2;
+
+        boolean hasTransaction = !message.transactionInput().isEmpty() || !message.transactionOutput().isEmpty();
+
+        if (hasTransaction) {
+            String arrowText = Component.translatable("simchat.transaction.arrow").getString();
+            String soldText = Component.translatable("simchat.transaction.sold").getString() + " ";
+            String receivedText = Component.translatable("simchat.transaction.received").getString() + " ";
+
+            int inputWidth = calculateTransactionItemsWidth(message.transactionInput());
+            int outputWidth = calculateTransactionItemsWidth(message.transactionOutput());
+            int arrowWidth = mc.font.width(arrowText);
+
+            int totalWidth = 0;
+            if (inputWidth > 0 && outputWidth > 0) {
+                totalWidth = inputWidth + arrowWidth + outputWidth;
+            } else if (inputWidth > 0) {
+                totalWidth = mc.font.width(soldText) + inputWidth;
+            } else if (outputWidth > 0) {
+                totalWidth = mc.font.width(receivedText) + outputWidth;
+            }
+
+            int startX = x + (contentWidth - totalWidth) / 2;
+            int currentX = startX;
+            int itemY = centerY;
+
+            if (inputWidth > 0 && outputWidth > 0) {
+                currentX = renderTransactionItems(graphics, mc, message.transactionInput(),
+                        currentX, itemY, INPUT_BG_COLOR, mouseX, mouseY, hoverState);
+                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
+                graphics.drawString(mc.font, arrowText, currentX, textY, SYSTEM_TEXT_COLOR);
+                currentX += arrowWidth;
+                renderTransactionItems(graphics, mc, message.transactionOutput(),
+                        currentX, itemY, OUTPUT_BG_COLOR, mouseX, mouseY, hoverState);
+            } else if (inputWidth > 0) {
+                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
+                graphics.drawString(mc.font, soldText, currentX, textY, SYSTEM_TEXT_COLOR);
+                currentX += mc.font.width(soldText);
+                renderTransactionItems(graphics, mc, message.transactionInput(),
+                        currentX, itemY, INPUT_BG_COLOR, mouseX, mouseY, hoverState);
+            } else {
+                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
+                graphics.drawString(mc.font, receivedText, currentX, textY, SYSTEM_TEXT_COLOR);
+                currentX += mc.font.width(receivedText);
+                renderTransactionItems(graphics, mc, message.transactionOutput(),
+                        currentX, itemY, OUTPUT_BG_COLOR, mouseX, mouseY, hoverState);
+            }
+        } else if (!message.content().isEmpty()) {
+            int textWidth = mc.font.width(message.content());
+            int textX = x + (contentWidth - textWidth) / 2;
+            int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
+            graphics.drawString(mc.font, message.content(), textX, textY, SYSTEM_TEXT_COLOR);
+        }
+    }
+
+    /**
+     * Renders the typing indicator.
+     */
+    public static void renderTypingIndicator(GuiGraphics graphics, Minecraft mc,
+                                             String entityName, String imageId,
+                                             int x, int y) {
+        ResourceLocation avatarTexture = AvatarManager.getTexture(imageId);
+        graphics.blit(avatarTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 0, 0, 256, 256, 256, 256);
+
+        int textX = x + AVATAR_SIZE + MESSAGE_PADDING;
+        int textY = y;
+
+        graphics.drawString(mc.font, entityName != null ? entityName : "...", textX, textY, ENTITY_NAME_COLOR);
+        textY += mc.font.lineHeight + 2;
+
+        long time = System.currentTimeMillis();
+        int animSpeed = ClientConfig.TYPING_ANIMATION_SPEED.get();
+        int dotCount = (int) ((time / animSpeed) % 4);
+        StringBuilder dots = new StringBuilder();
+        for (int i = 0; i < dotCount; i++) {
+            dots.append(".");
+        }
+        String typingText = Component.translatable("simchat.chat.typing").getString() + dots;
+        graphics.drawString(mc.font, typingText, textX, textY, SYSTEM_TEXT_COLOR);
+    }
+
+    /**
+     * Calculates the height of a message.
+     */
+    public static int calculateHeight(Minecraft mc, ChatMessage message, int width) {
+        if (message.isSystemMessage()) {
+            return SYSTEM_MESSAGE_HEIGHT;
+        }
+
+        int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
+        List<String> wrappedLines = wrapText(mc, message.content(), textWidth);
+        int textHeight = wrappedLines.size() * (mc.font.lineHeight + 2);
+
+        int buttonRowHeight = 0;
+        if (!message.actions().isEmpty()) {
+            buttonRowHeight = BUTTON_HEIGHT + BUTTON_PADDING;
+        }
+
+        return Math.max(AVATAR_SIZE, mc.font.lineHeight + 2 + textHeight + buttonRowHeight) + MESSAGE_PADDING;
+    }
+
+    /**
+     * Wraps text to fit within maxWidth.
+     */
+    public static List<String> wrapText(Minecraft mc, String text, int maxWidth) {
+        List<String> lines = new ArrayList<>();
+        String[] words = text.split(" ");
+        StringBuilder currentLine = new StringBuilder();
+
+        for (String word : words) {
+            String testLine = currentLine.length() == 0 ? word : currentLine + " " + word;
+            if (mc.font.width(testLine) > maxWidth) {
+                if (currentLine.length() > 0) {
+                    lines.add(currentLine.toString());
+                    currentLine = new StringBuilder(word);
+                } else {
+                    lines.add(word);
+                }
+            } else {
+                currentLine = new StringBuilder(testLine);
+            }
+        }
+        if (currentLine.length() > 0) {
+            lines.add(currentLine.toString());
+        }
+        return lines;
+    }
+
+    private static void renderAvatar(GuiGraphics graphics, Minecraft mc, ChatMessage message, int x, int y) {
+        if (message.isPlayerMessage()) {
+            ResourceLocation skinTexture = getPlayerSkinTexture(mc);
+            RenderSystem.enableBlend();
+            graphics.blit(skinTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 8.0f, 8.0f, 8, 8, 64, 64);
+            graphics.blit(skinTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 40.0f, 8.0f, 8, 8, 64, 64);
+        } else {
+            ResourceLocation avatarTexture = AvatarManager.getTexture(message.senderImageId());
+            graphics.blit(avatarTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 0, 0, 256, 256, 256, 256);
+        }
+    }
+
+    private static ResourceLocation getPlayerSkinTexture(Minecraft mc) {
+        if (mc.player == null) {
+            return DefaultPlayerSkin.getDefaultSkin();
+        }
+
+        PlayerInfo playerInfo = mc.getConnection() != null
+                ? mc.getConnection().getPlayerInfo(mc.player.getUUID())
+                : null;
+
+        if (playerInfo != null) {
+            return playerInfo.getSkinLocation();
+        }
+
+        return DefaultPlayerSkin.getDefaultSkin(mc.player.getUUID());
+    }
+
+    private static int calculateTransactionItemsWidth(List<ChatAction.ActionItem> items) {
+        int width = 0;
+        for (ChatAction.ActionItem item : items) {
+            if (item.toItemStack() != null) {
+                width += ITEM_ICON_SIZE + ITEM_SPACING;
+            }
+        }
+        return width > 0 ? width - ITEM_SPACING : 0;
+    }
+
+    private static int renderTransactionItems(GuiGraphics graphics, Minecraft mc,
+                                              List<ChatAction.ActionItem> items,
+                                              int startX, int itemY, int bgColor,
+                                              int mouseX, int mouseY, HoverState hoverState) {
+        int currentX = startX;
+        for (ChatAction.ActionItem item : items) {
+            ItemStack stack = item.toItemStack();
+            if (stack != null) {
+                int bgX = currentX - ITEM_BG_PADDING;
+                int bgY = itemY - ITEM_BG_PADDING;
+                int bgSize = ITEM_ICON_SIZE + ITEM_BG_PADDING * 2;
+                graphics.fill(bgX, bgY, bgX + bgSize, bgY + bgSize, bgColor);
+
+                graphics.renderItem(stack, currentX, itemY);
+                if (item.count() > 1) {
+                    graphics.renderItemDecorations(mc.font, stack, currentX, itemY);
+                }
+
+                if (mouseX >= currentX && mouseX < currentX + ITEM_ICON_SIZE
+                        && mouseY >= itemY && mouseY < itemY + ITEM_ICON_SIZE) {
+                    hoverState.setHoveredItem(stack, mouseX, mouseY);
+                }
+
+                currentX += ITEM_ICON_SIZE + ITEM_SPACING;
+            }
+        }
+        return currentX;
+    }
+}

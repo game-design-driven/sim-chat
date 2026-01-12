@@ -1,4 +1,20 @@
 {
   "key.categories.simchat": "Sim Chat",
-  "key.simchat.open_chat": "Open Chat"
+  "key.simchat.open_chat": "Open Chat",
+
+  "simchat.screen.no_messages": "No messages yet",
+  "simchat.screen.select_conversation": "Select a conversation",
+
+  "simchat.chat.typing": "typing",
+  "simchat.chat.day": "Day %s",
+
+  "simchat.transaction.sold": "Sold:",
+  "simchat.transaction.received": "Received:",
+  "simchat.transaction.arrow": " \u2192 ",
+
+  "simchat.tooltip.missing_items": "Missing required items",
+  "simchat.tooltip.no_inventory_space": "Not enough inventory space",
+
+  "simchat.sort.recent": "Recent",
+  "simchat.sort.alphabetical": "A-Z"
 }

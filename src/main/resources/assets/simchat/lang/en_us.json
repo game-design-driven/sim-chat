@@ -16,5 +16,34 @@
   "simchat.tooltip.no_inventory_space": "Not enough inventory space",
 
   "simchat.sort.recent": "Recent",
-  "simchat.sort.alphabetical": "A-Z"
+  "simchat.sort.alphabetical": "A-Z",
+
+  "simchat.command.error.unknown_dialogue": "Unknown dialogue: %s",
+  "simchat.command.error.dialogue_no_entity": "Dialogue %s has no entityId",
+  "simchat.command.error.no_team": "Player has no team",
+  "simchat.command.error.not_in_team": "You are not in a team",
+  "simchat.command.error.team_not_found": "Team not found: %s",
+
+  "simchat.command.send.success": "Sending dialogue %s to %s",
+  "simchat.command.clear.all": "Cleared all conversations for team %s",
+  "simchat.command.clear.entity": "Cleared conversation with %s",
+
+  "simchat.command.team.created": "Created and joined team '%s' (ID: %s)",
+  "simchat.command.team.joined": "Joined team '%s'",
+  "simchat.command.team.invited": "Invited %s to your team",
+  "simchat.command.team.title_changed": "Team title changed to '%s'",
+  "simchat.command.team.title_changed_admin": "Team title for %s changed to '%s'",
+
+  "simchat.command.team.invite_button": "[Join Team]",
+  "simchat.command.team.invite_hover": "Click to join team %s",
+  "simchat.command.team.invite_message": "%s invited you to team '%s' ",
+
+  "simchat.command.team.list_header": "=== Teams ===",
+  "simchat.command.team.list_entry": "- %s (ID: %s, Members: %d)",
+
+  "simchat.command.team.info_header": "=== Your Team ===",
+  "simchat.command.team.info_title": "Title: %s",
+  "simchat.command.team.info_id": "ID: %s",
+  "simchat.command.team.info_members": "Members: %d",
+  "simchat.command.team.info_conversations": "Conversations: %d"
 }

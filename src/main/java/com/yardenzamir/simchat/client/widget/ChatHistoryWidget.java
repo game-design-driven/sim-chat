@@ -227,14 +227,28 @@ public class ChatHistoryWidget extends AbstractWidget {
                 int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
                 List<String> wrappedLines = MessageRenderer.wrapText(minecraft, message.content(), textWidth);
                 int textY = y + minecraft.font.lineHeight + 2 + (wrappedLines.size() * (minecraft.font.lineHeight + 2));
-                int buttonY = textY + BUTTON_PADDING;
+                int buttonStartY = textY + BUTTON_PADDING;
 
-                if (mouseY >= buttonY && mouseY < buttonY + BUTTON_HEIGHT) {
+                // Calculate total button area height
+                int buttonRows = MessageRenderer.calculateButtonRows(minecraft, message.actions(), textWidth);
+                int buttonAreaHeight = buttonRows * (BUTTON_HEIGHT + BUTTON_PADDING);
+
+                if (mouseY >= buttonStartY && mouseY < buttonStartY + buttonAreaHeight) {
                     int buttonX = textX;
+                    int buttonY = buttonStartY;
+                    int maxButtonX = textX + textWidth;
+
                     for (ChatAction action : message.actions()) {
                         int buttonWidth = ActionButtonRenderer.calculateWidth(minecraft, action);
 
-                        if (mouseX >= buttonX && mouseX < buttonX + buttonWidth) {
+                        // Wrap to next row if button doesn't fit
+                        if (buttonX + buttonWidth > maxButtonX && buttonX > textX) {
+                            buttonX = textX;
+                            buttonY += BUTTON_HEIGHT + BUTTON_PADDING;
+                        }
+
+                        if (mouseX >= buttonX && mouseX < buttonX + buttonWidth
+                                && mouseY >= buttonY && mouseY < buttonY + BUTTON_HEIGHT) {
                             if (InventoryHelper.isActionDisabled(minecraft, action)) {
                                 return true;
                             }

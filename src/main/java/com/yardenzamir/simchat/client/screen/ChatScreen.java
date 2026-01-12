@@ -1,6 +1,7 @@
 package com.yardenzamir.simchat.client.screen;
 
 import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.client.ClientTeamCache;
 import com.yardenzamir.simchat.client.SortMode;
 import com.yardenzamir.simchat.client.widget.ChatHistoryWidget;
 import com.yardenzamir.simchat.client.widget.EntityListWidget;
@@ -8,6 +9,7 @@ import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.PlayerChatData;
 import com.yardenzamir.simchat.network.MarkAsReadPacket;
 import com.yardenzamir.simchat.network.NetworkHandler;
+import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -19,27 +21,28 @@ import java.util.List;
 
 /**
  * Main chat screen with entity list sidebar and chat history panel.
- * The divider between them is draggable to resize.
+ * Uses TeamData from ClientTeamCache for conversations, PlayerChatData for read counts.
  */
 public class ChatScreen extends Screen {
 
     private static final int PADDING = 4;
     private static final int HEADER_HEIGHT = 20;
     private static final int DIVIDER_WIDTH = 5;
-    private static final int COMPACT_WIDTH = 60; // PADDING*2 (widget margin) + PADDING*2 (content margin) + PADDING (avatar left) + AVATAR(36) + PADDING (avatar right) = 60
-    private static final int SNAP_THRESHOLD = 20; // Snap to compact when within this distance
+    private static final int COMPACT_WIDTH = 60;
+    private static final int SNAP_THRESHOLD = 20;
 
     private @Nullable String selectedEntityId;
     private EntityListWidget entityList;
     private ChatHistoryWidget chatHistory;
-    private int lastRevision = -1;
+    private @Nullable String lastTeamId;
+    private int lastTeamRevision = -1;
+    private int lastReadRevision = -1;
 
     private int sidebarWidth;
     private boolean draggingDivider = false;
     private boolean hoveringDivider = false;
 
     private SortMode sortMode;
-    private @Nullable PlayerChatData cachedData;
 
     public ChatScreen(@Nullable String initialEntityId) {
         super(Component.literal("SimChat"));
@@ -76,7 +79,6 @@ public class ChatScreen extends Screen {
     private void rebuildLayout() {
         clearWidgets();
 
-        // Entity list on the left
         entityList = new EntityListWidget(
                 minecraft,
                 sidebarWidth - PADDING * 2,
@@ -88,7 +90,6 @@ public class ChatScreen extends Screen {
         entityList.setCompactMode(isCompactMode());
         addRenderableWidget(entityList);
 
-        // Chat history on the right
         int chatX = sidebarWidth + PADDING;
         int chatWidth = width - sidebarWidth - PADDING * 2;
         chatHistory = new ChatHistoryWidget(
@@ -101,40 +102,44 @@ public class ChatScreen extends Screen {
         addRenderableWidget(chatHistory);
 
         // Restore state after rebuild
-        if (minecraft != null && minecraft.player != null) {
-            ChatCapability.get(minecraft.player).ifPresent(data -> {
-                entityList.setEntities(data, data.getEntityIds());
-                if (selectedEntityId != null) {
-                    entityList.setSelected(selectedEntityId);
-                    chatHistory.updateMessages(data.getMessages(selectedEntityId), selectedEntityId);
-                    chatHistory.setTyping(
-                            data.isTyping(selectedEntityId),
-                            data.getEntityDisplayName(selectedEntityId),
-                            data.getEntityImageId(selectedEntityId)
-                    );
-                }
-            });
+        TeamData team = ClientTeamCache.getTeam();
+        if (team != null && minecraft != null && minecraft.player != null) {
+            PlayerChatData readData = ChatCapability.getOrThrow(minecraft.player);
+            entityList.setEntities(team, readData, team.getEntityIds());
+            if (selectedEntityId != null) {
+                entityList.setSelected(selectedEntityId);
+                chatHistory.updateMessages(team.getMessages(selectedEntityId), selectedEntityId);
+                chatHistory.setTyping(
+                        team.isTyping(selectedEntityId),
+                        team.getEntityDisplayName(selectedEntityId),
+                        team.getEntityImageId(selectedEntityId)
+                );
+            }
         }
     }
 
     private void refreshAll() {
-        if (minecraft == null || minecraft.player == null) return;
+        TeamData team = ClientTeamCache.getTeam();
+        if (team == null || minecraft == null || minecraft.player == null) return;
 
-        ChatCapability.get(minecraft.player).ifPresent(data -> {
-            cachedData = data;
-            lastRevision = data.getRevision();
-            List<String> entityIds = sortEntityIds(data, data.getEntityIds());
-            entityList.setEntities(data, entityIds);
-        });
+        PlayerChatData readData = ChatCapability.getOrThrow(minecraft.player);
+        lastTeamId = team.getId();
+        lastTeamRevision = team.getRevision();
+        lastReadRevision = readData.getRevision();
+
+        List<String> entityIds = sortEntityIds(team, team.getEntityIds());
+        entityList.setEntities(team, readData, entityIds);
     }
 
-    private List<String> sortEntityIds(PlayerChatData data, List<String> entityIds) {
+    private List<String> sortEntityIds(TeamData team, List<String> entityIds) {
         if (sortMode == SortMode.ALPHABETICAL) {
             List<String> sorted = new ArrayList<>(entityIds);
-            sorted.sort(Comparator.comparing(id -> data.getEntityDisplayName(id).toLowerCase()));
+            sorted.sort(Comparator.comparing(id -> {
+                String name = team.getEntityDisplayName(id);
+                return name != null ? name.toLowerCase() : id.toLowerCase();
+            }));
             return sorted;
         }
-        // RECENT mode - already sorted by most recent
         return entityIds;
     }
 
@@ -145,14 +150,13 @@ public class ChatScreen extends Screen {
     }
 
     private void selectFirstEntity() {
-        if (minecraft == null || minecraft.player == null) return;
+        TeamData team = ClientTeamCache.getTeam();
+        if (team == null) return;
 
-        ChatCapability.get(minecraft.player).ifPresent(data -> {
-            List<String> entityIds = data.getEntityIds();
-            if (!entityIds.isEmpty()) {
-                selectEntity(entityIds.get(0));
-            }
-        });
+        List<String> entityIds = team.getEntityIds();
+        if (!entityIds.isEmpty()) {
+            selectEntity(entityIds.get(0));
+        }
     }
 
     private void onEntitySelected(String entityId) {
@@ -163,41 +167,41 @@ public class ChatScreen extends Screen {
         this.selectedEntityId = entityId;
         entityList.setSelected(entityId);
 
-        if (minecraft != null && minecraft.player != null) {
-            ChatCapability.get(minecraft.player).ifPresent(data -> {
-                // Get read count before marking as read (for scroll to unread)
-                int readCount = data.getReadCount(entityId);
+        TeamData team = ClientTeamCache.getTeam();
+        if (team == null || minecraft == null || minecraft.player == null) return;
 
-                // Set messages with scroll to first unread
-                chatHistory.setMessages(data.getMessages(entityId), entityId, readCount);
-                chatHistory.setTyping(
-                        data.isTyping(entityId),
-                        data.getEntityDisplayName(entityId),
-                        data.getEntityImageId(entityId)
-                );
+        PlayerChatData readData = ChatCapability.getOrThrow(minecraft.player);
 
-                // Mark as read after setting messages
-                data.markAsRead(entityId);
-            });
-            NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(entityId));
-        }
+        // Get read count before marking as read
+        int readCount = readData.getReadCount(entityId);
+        int totalMessages = team.getMessageCount(entityId);
+
+        // Set messages with scroll to first unread
+        chatHistory.setMessages(team.getMessages(entityId), entityId, readCount);
+        chatHistory.setTyping(
+                team.isTyping(entityId),
+                team.getEntityDisplayName(entityId),
+                team.getEntityImageId(entityId)
+        );
+
+        // Mark as read
+        readData.markAsRead(entityId, totalMessages);
+        NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(entityId));
     }
 
     private void refreshChatHistory() {
-        if (minecraft == null || minecraft.player == null || selectedEntityId == null) {
+        TeamData team = ClientTeamCache.getTeam();
+        if (team == null || selectedEntityId == null) {
             chatHistory.clearMessages();
             return;
         }
 
-        ChatCapability.get(minecraft.player).ifPresent(data -> {
-            // Preserve scroll position during refresh
-            chatHistory.updateMessages(data.getMessages(selectedEntityId), selectedEntityId);
-            chatHistory.setTyping(
-                    data.isTyping(selectedEntityId),
-                    data.getEntityDisplayName(selectedEntityId),
-                    data.getEntityImageId(selectedEntityId)
-            );
-        });
+        chatHistory.updateMessages(team.getMessages(selectedEntityId), selectedEntityId);
+        chatHistory.setTyping(
+                team.isTyping(selectedEntityId),
+                team.getEntityDisplayName(selectedEntityId),
+                team.getEntityImageId(selectedEntityId)
+        );
     }
 
     private boolean isOverDivider(double mouseX) {
@@ -209,32 +213,28 @@ public class ChatScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         hoveringDivider = isOverDivider(mouseX);
 
-        // Dark background
         renderBackground(graphics);
 
-        // Sidebar background
         graphics.fill(0, 0, sidebarWidth, height, 0xDD1a1a2e);
 
-        // Divider - highlight when hovering or dragging
         int dividerColor = (hoveringDivider || draggingDivider) ? 0xFF6060a0 : 0xFF3d3d5c;
         graphics.fill(sidebarWidth - 1, 0, sidebarWidth + 1, height, dividerColor);
 
-        // Chat area background
         graphics.fill(sidebarWidth, 0, width, height, 0xDD12121f);
 
-        // Header with selected entity name and subtitle or empty state
-        if (selectedEntityId != null && minecraft != null && minecraft.player != null) {
-            ChatCapability.get(minecraft.player).ifPresent(data -> {
-                String displayName = data.getEntityDisplayName(selectedEntityId);
-                int nameX = sidebarWidth + PADDING;
-                graphics.drawString(font, displayName, nameX, PADDING + 4, 0xFFFFFFFF);
+        // Header with selected entity name
+        TeamData team = ClientTeamCache.getTeam();
+        if (selectedEntityId != null && team != null) {
+            String displayName = team.getEntityDisplayName(selectedEntityId);
+            if (displayName == null) displayName = selectedEntityId;
+            int nameX = sidebarWidth + PADDING;
+            graphics.drawString(font, displayName, nameX, PADDING + 4, 0xFFFFFFFF);
 
-                String subtitle = data.getEntitySubtitle(selectedEntityId);
-                if (subtitle != null) {
-                    int subtitleX = nameX + font.width(displayName);
-                    graphics.drawString(font, " - " + subtitle, subtitleX, PADDING + 4, 0xFF888888);
-                }
-            });
+            String subtitle = team.getEntitySubtitle(selectedEntityId);
+            if (subtitle != null) {
+                int subtitleX = nameX + font.width(displayName);
+                graphics.drawString(font, " - " + subtitle, subtitleX, PADDING + 4, 0xFF888888);
+            }
         } else {
             Component emptyText = Component.translatable("simchat.screen.select_conversation");
             int textWidth = font.width(emptyText);
@@ -243,10 +243,9 @@ public class ChatScreen extends Screen {
             graphics.drawString(font, emptyText, centerX - textWidth / 2, centerY, 0xFF888888);
         }
 
-        // Header separator
         graphics.fill(sidebarWidth, HEADER_HEIGHT, width, HEADER_HEIGHT + 1, 0xFF3d3d5c);
 
-        // Sort button at bottom of sidebar
+        // Sort button
         if (!isCompactMode()) {
             Component sortText = sortMode.getDisplayName();
             int sortTextWidth = font.width(sortText);
@@ -254,28 +253,21 @@ public class ChatScreen extends Screen {
             int sortButtonY = height - PADDING - font.lineHeight - 4;
             int sortButtonWidth = sidebarWidth - PADDING * 2 - DIVIDER_WIDTH;
 
-            // Button background
             boolean sortHovered = mouseX >= sortButtonX && mouseX < sortButtonX + sortButtonWidth
                     && mouseY >= sortButtonY && mouseY < sortButtonY + font.lineHeight + 4;
             int buttonBg = sortHovered ? 0xFF404060 : 0xFF303050;
             graphics.fill(sortButtonX, sortButtonY, sortButtonX + sortButtonWidth, sortButtonY + font.lineHeight + 4, buttonBg);
-
-            // Button text centered
             graphics.drawString(font, sortText, sortButtonX + (sortButtonWidth - sortTextWidth) / 2, sortButtonY + 2, 0xFFCCCCCC);
         }
 
-        // Empty state for sidebar
-        if (minecraft != null && minecraft.player != null) {
-            ChatCapability.get(minecraft.player).ifPresent(data -> {
-                if (!data.hasConversations()) {
-                    Component emptyText = Component.translatable("simchat.screen.no_messages");
-                    int emptyTextWidth = font.width(emptyText);
-                    graphics.drawString(font, emptyText,
-                            (sidebarWidth - emptyTextWidth) / 2,
-                            height / 2,
-                            0xFF888888);
-                }
-            });
+        // Empty state
+        if (team == null || !team.hasConversations()) {
+            Component emptyText = Component.translatable("simchat.screen.no_messages");
+            int emptyTextWidth = font.width(emptyText);
+            graphics.drawString(font, emptyText,
+                    (sidebarWidth - emptyTextWidth) / 2,
+                    height / 2,
+                    0xFF888888);
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -288,7 +280,6 @@ public class ChatScreen extends Screen {
             return true;
         }
 
-        // Check sort button click
         if (button == 0 && !isCompactMode()) {
             int sortButtonX = PADDING;
             int sortButtonY = height - PADDING - font.lineHeight - 4;
@@ -309,7 +300,6 @@ public class ChatScreen extends Screen {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0 && draggingDivider) {
             draggingDivider = false;
-            // Save to config
             ClientConfig.SIDEBAR_WIDTH.set(sidebarWidth);
             return true;
         }
@@ -322,7 +312,6 @@ public class ChatScreen extends Screen {
             int newWidth = (int) mouseX;
             int maxWidth = width / 2;
 
-            // Snap to compact mode when close
             if (newWidth < COMPACT_WIDTH + SNAP_THRESHOLD) {
                 newWidth = COMPACT_WIDTH;
             }
@@ -349,22 +338,39 @@ public class ChatScreen extends Screen {
 
         entityList.tick();
 
-        if (minecraft != null && minecraft.player != null) {
-            ChatCapability.get(minecraft.player).ifPresent(data -> {
-                cachedData = data;
-                if (data.getRevision() != lastRevision) {
-                    if (selectedEntityId != null) {
-                        data.markAsRead(selectedEntityId);
-                        NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(selectedEntityId));
-                    }
+        TeamData team = ClientTeamCache.getTeam();
+        if (team == null || minecraft == null || minecraft.player == null) return;
 
-                    lastRevision = data.getRevision();
+        PlayerChatData readData = ChatCapability.getOrThrow(minecraft.player);
 
-                    List<String> entityIds = sortEntityIds(data, data.getEntityIds());
-                    entityList.setEntities(data, entityIds);
-                    refreshChatHistory();
-                }
-            });
+        // Check if team changed (different team ID) or data changed (revision)
+        boolean teamChanged = !team.getId().equals(lastTeamId);
+        boolean dataChanged = team.getRevision() != lastTeamRevision || readData.getRevision() != lastReadRevision;
+
+        if (teamChanged || dataChanged) {
+            if (teamChanged) {
+                // Switched teams - clear selection and select first entity
+                selectedEntityId = null;
+                lastTeamId = team.getId();
+            }
+
+            if (selectedEntityId != null) {
+                int totalMessages = team.getMessageCount(selectedEntityId);
+                readData.markAsRead(selectedEntityId, totalMessages);
+                NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(selectedEntityId));
+            }
+
+            lastTeamRevision = team.getRevision();
+            lastReadRevision = readData.getRevision();
+
+            List<String> entityIds = sortEntityIds(team, team.getEntityIds());
+            entityList.setEntities(team, readData, entityIds);
+
+            if (teamChanged && !entityIds.isEmpty()) {
+                selectEntity(entityIds.get(0));
+            } else {
+                refreshChatHistory();
+            }
         }
     }
 }

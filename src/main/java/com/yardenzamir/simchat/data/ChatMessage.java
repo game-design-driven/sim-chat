@@ -8,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Represents a single chat message in a conversation.
@@ -25,6 +26,7 @@ public final class ChatMessage {
     private static final String TAG_ACTIONS = "actions";
     private static final String TAG_TRANSACTION_INPUT = "transactionInput";
     private static final String TAG_TRANSACTION_OUTPUT = "transactionOutput";
+    private static final String TAG_PLAYER_UUID = "playerUuid";
     // Legacy support
     private static final String TAG_TIMESTAMP = "timestamp";
 
@@ -39,11 +41,13 @@ public final class ChatMessage {
     private final List<ChatAction> actions;
     private final List<ChatAction.ActionItem> transactionInput;
     private final List<ChatAction.ActionItem> transactionOutput;
+    private final @Nullable UUID playerUuid;
 
     private ChatMessage(boolean isPlayerMessage, boolean isSystemMessage, String entityId, String senderName,
                         @Nullable String senderSubtitle, @Nullable String senderImageId,
                         String content, long worldDay, List<ChatAction> actions,
-                        List<ChatAction.ActionItem> transactionInput, List<ChatAction.ActionItem> transactionOutput) {
+                        List<ChatAction.ActionItem> transactionInput, List<ChatAction.ActionItem> transactionOutput,
+                        @Nullable UUID playerUuid) {
         this.isPlayerMessage = isPlayerMessage;
         this.isSystemMessage = isSystemMessage;
         this.entityId = entityId;
@@ -55,6 +59,7 @@ public final class ChatMessage {
         this.actions = List.copyOf(actions);
         this.transactionInput = List.copyOf(transactionInput);
         this.transactionOutput = List.copyOf(transactionOutput);
+        this.playerUuid = playerUuid;
     }
 
     /**
@@ -65,17 +70,20 @@ public final class ChatMessage {
     public static ChatMessage fromEntity(String entityId, String displayName, @Nullable String subtitle,
                                          String imageId, String content, long worldDay, List<ChatAction> actions) {
         return new ChatMessage(false, false, entityId, displayName, subtitle, imageId, content, worldDay, actions,
-                Collections.emptyList(), Collections.emptyList());
+                Collections.emptyList(), Collections.emptyList(), null);
     }
 
     /**
      * Creates a player reply message.
      *
+     * @param playerUuid Player's UUID for skin lookup
+     * @param teamTitle Team name shown as subtitle
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
-    public static ChatMessage fromPlayer(String entityId, String playerName, String content, long worldDay) {
-        return new ChatMessage(true, false, entityId, playerName, null, null, content, worldDay, Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList());
+    public static ChatMessage fromPlayer(String entityId, UUID playerUuid, String playerName,
+                                         @Nullable String teamTitle, String content, long worldDay) {
+        return new ChatMessage(true, false, entityId, playerName, teamTitle, null, content, worldDay,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), playerUuid);
     }
 
     /**
@@ -85,7 +93,7 @@ public final class ChatMessage {
      */
     public static ChatMessage systemMessage(String entityId, String content, long worldDay) {
         return new ChatMessage(false, true, entityId, "", null, null, content, worldDay, Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList());
+                Collections.emptyList(), Collections.emptyList(), null);
     }
 
     /**
@@ -99,7 +107,7 @@ public final class ChatMessage {
                                                   List<ChatAction.ActionItem> inputItems,
                                                   List<ChatAction.ActionItem> outputItems) {
         return new ChatMessage(false, true, entityId, "", null, null, "", worldDay, Collections.emptyList(),
-                inputItems, outputItems);
+                inputItems, outputItems, null);
     }
 
     public boolean isPlayerMessage() {
@@ -158,11 +166,18 @@ public final class ChatMessage {
     }
 
     /**
+     * Gets the player UUID for skin lookup (only set for player messages).
+     */
+    public @Nullable UUID playerUuid() {
+        return playerUuid;
+    }
+
+    /**
      * Returns a copy of this message with actions cleared.
      */
     public ChatMessage withoutActions() {
         return new ChatMessage(isPlayerMessage, isSystemMessage, entityId, senderName, senderSubtitle, senderImageId,
-                content, worldDay, Collections.emptyList(), transactionInput, transactionOutput);
+                content, worldDay, Collections.emptyList(), transactionInput, transactionOutput, playerUuid);
     }
 
     public CompoundTag toNbt() {
@@ -193,6 +208,9 @@ public final class ChatMessage {
         }
         if (!transactionOutput.isEmpty()) {
             tag.put(TAG_TRANSACTION_OUTPUT, itemListToNbt(transactionOutput));
+        }
+        if (playerUuid != null) {
+            tag.putUUID(TAG_PLAYER_UUID, playerUuid);
         }
         return tag;
     }
@@ -239,6 +257,8 @@ public final class ChatMessage {
         List<ChatAction.ActionItem> transactionInput = itemListFromNbt(tag, TAG_TRANSACTION_INPUT);
         List<ChatAction.ActionItem> transactionOutput = itemListFromNbt(tag, TAG_TRANSACTION_OUTPUT);
 
+        UUID playerUuid = tag.hasUUID(TAG_PLAYER_UUID) ? tag.getUUID(TAG_PLAYER_UUID) : null;
+
         return new ChatMessage(
                 tag.getBoolean(TAG_IS_PLAYER),
                 tag.getBoolean(TAG_IS_SYSTEM),
@@ -250,7 +270,8 @@ public final class ChatMessage {
                 day,
                 actions,
                 transactionInput,
-                transactionOutput
+                transactionOutput,
+                playerUuid
         );
     }
 }

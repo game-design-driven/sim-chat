@@ -4,6 +4,7 @@ import com.yardenzamir.simchat.client.AvatarManager;
 import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatMessage;
 import com.yardenzamir.simchat.data.PlayerChatData;
+import com.yardenzamir.simchat.team.TeamData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ObjectSelectionList;
@@ -34,18 +35,19 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
         this.setRenderTopAndBottom(false);
     }
 
-    public void setEntities(PlayerChatData data, List<String> entityIds) {
+    public void setEntities(TeamData team, PlayerChatData readData, List<String> entityIds) {
         clearEntries();
         for (String entityId : entityIds) {
+            int totalMessages = team.getMessageCount(entityId);
             addEntry(new EntityEntry(
                 entityId,
-                data.getEntityDisplayName(entityId),
-                data.getEntitySubtitle(entityId),
-                data.getEntityImageId(entityId),
-                data.hasUnread(entityId),
-                data.getUnreadCount(entityId),
-                data.isTyping(entityId),
-                data.getLastMessage(entityId)
+                team.getEntityDisplayName(entityId),
+                team.getEntitySubtitle(entityId),
+                team.getEntityImageId(entityId),
+                readData.hasUnread(entityId, totalMessages),
+                readData.getUnreadCount(entityId, totalMessages),
+                team.isTyping(entityId),
+                team.getLastMessage(entityId)
             ));
         }
         if (selectedEntityId != null) {

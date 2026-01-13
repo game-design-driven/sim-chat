@@ -24,15 +24,36 @@ public final class MessageRenderer {
     private MessageRenderer() {}
 
     /**
+     * Info about an action in input mode.
+     */
+    public record ActiveInputInfo(
+            int messageIndex,
+            String actionLabel,
+            String currentText,
+            boolean isValid,
+            boolean cursorVisible
+    ) {}
+
+    /**
+     * Result of rendering, including input-related click targets.
+     */
+    public record RenderResult(
+            boolean sendButtonClicked,
+            String clickedActionLabel
+    ) {
+        public static final RenderResult NONE = new RenderResult(false, null);
+    }
+
+    /**
      * Renders a chat message.
      */
-    public static void render(GuiGraphics graphics, Minecraft mc, ChatMessage message,
+    public static RenderResult render(GuiGraphics graphics, Minecraft mc, ChatMessage message,
                               int index, int x, int y, int width,
                               int mouseX, int mouseY, boolean isHovered,
-                              HoverState hoverState) {
+                              HoverState hoverState, ActiveInputInfo activeInput) {
         if (message.isSystemMessage()) {
             renderSystemMessage(graphics, mc, message, x, y, width, mouseX, mouseY, hoverState);
-            return;
+            return RenderResult.NONE;
         }
 
         // Avatar
@@ -69,13 +90,24 @@ public final class MessageRenderer {
         }
 
         // Action buttons (with wrapping)
+        RenderResult result = RenderResult.NONE;
         if (!message.actions().isEmpty()) {
             int buttonX = textX;
             int buttonY = textY + BUTTON_PADDING;
             int maxButtonX = textX + textWidth;
 
             for (ChatAction action : message.actions()) {
-                int buttonWidth = ActionButtonRenderer.calculateWidth(mc, action);
+                // Check if this action is in input mode
+                boolean isActiveInput = activeInput != null
+                        && activeInput.messageIndex() == index
+                        && activeInput.actionLabel().equals(action.label());
+
+                int buttonWidth;
+                if (isActiveInput && action.playerInput() != null) {
+                    buttonWidth = ActionButtonRenderer.calculateInputModeWidth(mc, action.playerInput().maxLength());
+                } else {
+                    buttonWidth = ActionButtonRenderer.calculateWidth(mc, action);
+                }
 
                 // Wrap to next row if button doesn't fit
                 if (buttonX + buttonWidth > maxButtonX && buttonX > textX) {
@@ -83,11 +115,23 @@ public final class MessageRenderer {
                     buttonY += BUTTON_HEIGHT + BUTTON_PADDING;
                 }
 
-                ActionButtonRenderer.render(graphics, mc, action, buttonX, buttonY,
-                        mouseX, mouseY, hoverState);
+                if (isActiveInput && action.playerInput() != null) {
+                    // Render input field instead of button
+                    var inputResult = ActionButtonRenderer.renderInputMode(graphics, mc, action,
+                            buttonX, buttonY, maxButtonX - buttonX,
+                            activeInput.currentText(), activeInput.isValid(), activeInput.cursorVisible(),
+                            mouseX, mouseY, hoverState);
+                    if (inputResult.sendButtonHovered()) {
+                        result = new RenderResult(true, action.label());
+                    }
+                } else {
+                    ActionButtonRenderer.render(graphics, mc, action, buttonX, buttonY,
+                            mouseX, mouseY, hoverState);
+                }
                 buttonX += buttonWidth + BUTTON_PADDING;
             }
         }
+        return result;
     }
 
     /**

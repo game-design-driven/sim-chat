@@ -54,4 +54,18 @@ public final class ChatHistoryConstants {
 
     // Inventory
     public static final int MAIN_INVENTORY_SIZE = 36;
+
+    // Player input field
+    public static final int INPUT_FIELD_MIN_WIDTH = 80;
+    public static final int INPUT_FIELD_HEIGHT = BUTTON_HEIGHT;
+    public static final int INPUT_SEND_BUTTON_WIDTH = 36;
+    public static final int INPUT_FIELD_PADDING = 4;
+    public static final int INPUT_VALID_COLOR = 0xFF55FF55;
+    public static final int INPUT_INVALID_COLOR = 0xFFFF5555;
+    public static final int INPUT_FIELD_BG_COLOR = 0xFF202020;
+    public static final int INPUT_FIELD_BORDER_COLOR = 0xFF404040;
+    public static final int INPUT_FIELD_BORDER_FOCUSED_COLOR = 0xFF606060;
+    public static final int INPUT_CURSOR_COLOR = 0xFFFFFFFF;
+    public static final int INPUT_SEND_ENABLED_COLOR = 0xFF308030;
+    public static final int INPUT_SEND_DISABLED_COLOR = 0xFF404040;
 }

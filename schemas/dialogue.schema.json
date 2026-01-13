@@ -73,6 +73,47 @@
             "type": "array",
             "description": "Items given to player on click (orange background)",
             "items": { "$ref": "#/$defs/itemSpec" }
+          },
+          "playerInput": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Variable name (shorthand form with defaults: maxLength=64, no pattern, saveAsData=false)",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "required": ["id"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Variable name, accessible via {input:id} in reply/commands",
+                    "minLength": 1
+                  },
+                  "maxLength": {
+                    "type": "integer",
+                    "description": "Maximum input length",
+                    "minimum": 1,
+                    "maximum": 256,
+                    "default": 64
+                  },
+                  "pattern": {
+                    "type": "string",
+                    "description": "Regex pattern for validation (Java regex syntax). Input is colored green/red based on match."
+                  },
+                  "error": {
+                    "type": "string",
+                    "description": "Tooltip shown when input doesn't match pattern"
+                  },
+                  "saveAsData": {
+                    "type": "boolean",
+                    "description": "If true, saves input to team data as data:<id>",
+                    "default": false
+                  }
+                }
+              }
+            ],
+            "description": "Transforms action into text input field. Value available via {input:id} template in reply/commands."
           }
         }
       }
@@ -130,6 +171,26 @@
           "itemsInput": [{"id": "minecraft:emerald", "count": 10}],
           "itemsOutput": [{"id": "minecraft:iron_sword", "count": 1}],
           "nextState": "mypack:merchant/thanks"
+        }
+      ]
+    },
+    {
+      "entityId": "mayor",
+      "entityName": "Mayor Thompson",
+      "text": "Welcome to our town! What should I call you?",
+      "actions": [
+        {
+          "label": "Enter your name",
+          "playerInput": {
+            "id": "playerName",
+            "maxLength": 32,
+            "pattern": "^[a-zA-Z ]+$",
+            "error": "Name must contain only letters and spaces",
+            "saveAsData": true
+          },
+          "reply": "My name is {input:playerName}.",
+          "commands": ["simchat team title {input:playerName}'s Party"],
+          "nextState": "mypack:mayor/welcome_named"
         }
       ]
     }

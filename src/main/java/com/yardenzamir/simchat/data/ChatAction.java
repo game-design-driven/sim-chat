@@ -27,6 +27,7 @@ import java.util.List;
  * @param itemsOutput  Items given to player on click (orange background)
  * @param nextState    If present, dialogue resource location to send after this action (e.g., "mypack:npc/next")
  * @param condition    If present, condition that must pass for action to be visible (e.g., "kjs:hasHighRep", "!flag:seen_intro")
+ * @param playerInput  If present, transforms button into text input field
  */
 public record ChatAction(
         String label,
@@ -36,8 +37,62 @@ public record ChatAction(
         List<ActionItem> itemsInput,
         List<ActionItem> itemsOutput,
         @Nullable String nextState,
-        @Nullable String condition
+        @Nullable String condition,
+        @Nullable PlayerInputConfig playerInput
 ) {
+
+    /**
+     * Configuration for player text input action.
+     *
+     * @param id         Variable name, accessible via {input:id} in reply/commands
+     * @param maxLength  Maximum input length (1-256, default 64)
+     * @param pattern    Regex pattern for validation (null = any non-empty string)
+     * @param error      Tooltip shown when input doesn't match pattern
+     * @param saveAsData If true, saves input to team data as data:<id>
+     */
+    public record PlayerInputConfig(
+            String id,
+            int maxLength,
+            @Nullable String pattern,
+            @Nullable String error,
+            boolean saveAsData
+    ) {
+        private static final String TAG_ID = "id";
+        private static final String TAG_MAX_LENGTH = "maxLength";
+        private static final String TAG_PATTERN = "pattern";
+        private static final String TAG_ERROR = "error";
+        private static final String TAG_SAVE_AS_DATA = "saveAsData";
+
+        public static final int DEFAULT_MAX_LENGTH = 64;
+
+        public PlayerInputConfig(String id) {
+            this(id, DEFAULT_MAX_LENGTH, null, null, false);
+        }
+
+        public CompoundTag toNbt() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString(TAG_ID, id);
+            tag.putInt(TAG_MAX_LENGTH, maxLength);
+            if (pattern != null) {
+                tag.putString(TAG_PATTERN, pattern);
+            }
+            if (error != null) {
+                tag.putString(TAG_ERROR, error);
+            }
+            tag.putBoolean(TAG_SAVE_AS_DATA, saveAsData);
+            return tag;
+        }
+
+        public static PlayerInputConfig fromNbt(CompoundTag tag) {
+            return new PlayerInputConfig(
+                    tag.getString(TAG_ID),
+                    tag.contains(TAG_MAX_LENGTH) ? tag.getInt(TAG_MAX_LENGTH) : DEFAULT_MAX_LENGTH,
+                    tag.contains(TAG_PATTERN) ? tag.getString(TAG_PATTERN) : null,
+                    tag.contains(TAG_ERROR) ? tag.getString(TAG_ERROR) : null,
+                    tag.getBoolean(TAG_SAVE_AS_DATA)
+            );
+        }
+    }
 
     private static final String TAG_LABEL = "label";
     private static final String TAG_COMMANDS = "commands";
@@ -47,6 +102,7 @@ public record ChatAction(
     private static final String TAG_ITEMS_OUTPUT = "itemsOutput";
     private static final String TAG_NEXT_STATE = "nextState";
     private static final String TAG_CONDITION = "condition";
+    private static final String TAG_PLAYER_INPUT = "playerInput";
     private static final String TAG_ITEM = "item";
     private static final String TAG_ITEM_COUNT = "count";
 
@@ -120,6 +176,9 @@ public record ChatAction(
         if (condition != null) {
             tag.putString(TAG_CONDITION, condition);
         }
+        if (playerInput != null) {
+            tag.put(TAG_PLAYER_INPUT, playerInput.toNbt());
+        }
 
         return tag;
     }
@@ -157,12 +216,15 @@ public record ChatAction(
         String replyText = tag.contains(TAG_REPLY) ? tag.getString(TAG_REPLY) : null;
         String nextState = tag.contains(TAG_NEXT_STATE) ? tag.getString(TAG_NEXT_STATE) : null;
         String condition = tag.contains(TAG_CONDITION) ? tag.getString(TAG_CONDITION) : null;
+        PlayerInputConfig playerInput = tag.contains(TAG_PLAYER_INPUT)
+                ? PlayerInputConfig.fromNbt(tag.getCompound(TAG_PLAYER_INPUT))
+                : null;
 
         List<ActionItem> itemsVisual = itemListFromNbt(tag, TAG_ITEMS_VISUAL);
         List<ActionItem> itemsInput = itemListFromNbt(tag, TAG_ITEMS_INPUT);
         List<ActionItem> itemsOutput = itemListFromNbt(tag, TAG_ITEMS_OUTPUT);
 
-        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState, condition);
+        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState, condition, playerInput);
     }
 
     /**

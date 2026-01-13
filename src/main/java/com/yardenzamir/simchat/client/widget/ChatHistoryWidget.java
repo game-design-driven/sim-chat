@@ -4,6 +4,7 @@ import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
 import com.yardenzamir.simchat.network.ActionClickPacket;
 import com.yardenzamir.simchat.network.NetworkHandler;
+import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -13,6 +14,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
 
@@ -32,6 +35,39 @@ public class ChatHistoryWidget extends AbstractWidget {
 
     private int scrollOffset = 0;
     private int contentHeight = 0;
+
+    // Player input state
+    private @Nullable ActiveInputState activeInput;
+    private long cursorBlinkStart = 0;
+
+    /**
+     * Tracks the state of an active text input field.
+     */
+    private record ActiveInputState(
+            int messageIndex,
+            String actionLabel,
+            StringBuilder text,
+            ChatAction.PlayerInputConfig config,
+            @Nullable Pattern compiledPattern
+    ) {
+        boolean isValid() {
+            if (text.isEmpty()) return false;
+            if (compiledPattern == null) return true;
+            return compiledPattern.matcher(text).matches();
+        }
+
+        static ActiveInputState create(int messageIndex, String actionLabel, ChatAction.PlayerInputConfig config) {
+            Pattern pattern = null;
+            if (config.pattern() != null) {
+                try {
+                    pattern = Pattern.compile(config.pattern());
+                } catch (PatternSyntaxException ignored) {
+                    // Invalid pattern - will always fail validation
+                }
+            }
+            return new ActiveInputState(messageIndex, actionLabel, new StringBuilder(), config, pattern);
+        }
+    }
 
     public ChatHistoryWidget(Minecraft minecraft, int width, int height, int x, int y) {
         super(x, y, width, height, Component.empty());
@@ -79,6 +115,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.typingEntityImageId = null;
         this.scrollOffset = 0;
         this.contentHeight = 0;
+        this.activeInput = null;
     }
 
     public void setTyping(boolean typing, @Nullable String entityName, @Nullable String imageId) {
@@ -155,9 +192,18 @@ public class ChatHistoryWidget extends AbstractWidget {
             }
 
             if (y + msgHeight > getY() && y < getY() + height) {
+                // Build active input info if this message has the active input
+                MessageRenderer.ActiveInputInfo inputInfo = null;
+                if (activeInput != null && activeInput.messageIndex() == i) {
+                    boolean cursorVisible = ((System.currentTimeMillis() - cursorBlinkStart) / 500) % 2 == 0;
+                    inputInfo = new MessageRenderer.ActiveInputInfo(
+                            i, activeInput.actionLabel(), activeInput.text().toString(),
+                            activeInput.isValid(), cursorVisible);
+                }
+
                 MessageRenderer.render(graphics, minecraft, message, i,
                         getX() + MESSAGE_PADDING, y, width,
-                        mouseX, mouseY, isHovered, hoverState);
+                        mouseX, mouseY, isHovered, hoverState, inputInfo);
             }
 
             y += msgHeight + MESSAGE_PADDING;
@@ -212,12 +258,15 @@ public class ChatHistoryWidget extends AbstractWidget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!isMouseOver(mouseX, mouseY) || button != 0) {
+        if (button != 0) {
             return false;
         }
 
         // Copy to avoid ConcurrentModificationException from network thread updates
         List<ChatMessage> snapshot = List.copyOf(messages);
+
+        // Track if we clicked inside the active input field
+        boolean clickedInsideActiveInput = false;
 
         int y = getY() + MESSAGE_PADDING - scrollOffset;
 
@@ -242,7 +291,17 @@ public class ChatHistoryWidget extends AbstractWidget {
                     int maxButtonX = textX + textWidth;
 
                     for (ChatAction action : message.actions()) {
-                        int buttonWidth = ActionButtonRenderer.calculateWidth(minecraft, action);
+                        // Check if this action is in input mode
+                        boolean isActiveInput = activeInput != null
+                                && activeInput.messageIndex() == i
+                                && activeInput.actionLabel().equals(action.label());
+
+                        int buttonWidth;
+                        if (isActiveInput && action.playerInput() != null) {
+                            buttonWidth = ActionButtonRenderer.calculateInputModeWidth(minecraft, action.playerInput().maxLength());
+                        } else {
+                            buttonWidth = ActionButtonRenderer.calculateWidth(minecraft, action);
+                        }
 
                         // Wrap to next row if button doesn't fit
                         if (buttonX + buttonWidth > maxButtonX && buttonX > textX) {
@@ -252,16 +311,47 @@ public class ChatHistoryWidget extends AbstractWidget {
 
                         if (mouseX >= buttonX && mouseX < buttonX + buttonWidth
                                 && mouseY >= buttonY && mouseY < buttonY + BUTTON_HEIGHT) {
-                            if (InventoryHelper.isActionDisabled(minecraft, action)) {
+
+                            if (isActiveInput && action.playerInput() != null) {
+                                // Clicked inside active input - check if Send button
+                                int fieldWidth = ActionButtonRenderer.calculateInputFieldWidth(minecraft,
+                                        activeInput.text().toString(), action.playerInput().maxLength());
+                                int sendX = buttonX + fieldWidth + BUTTON_PADDING;
+
+                                if (mouseX >= sendX) {
+                                    // Clicked Send button
+                                    if (activeInput.isValid() && entityId != null) {
+                                        NetworkHandler.CHANNEL.sendToServer(
+                                                new ActionClickPacket(entityId, i, action.label(), activeInput.text().toString())
+                                        );
+                                        activeInput = null;
+                                    }
+                                    return true;
+                                } else {
+                                    // Clicked inside field - keep input active
+                                    clickedInsideActiveInput = true;
+                                    return true;
+                                }
+                            } else if (action.playerInput() != null) {
+                                // Clicked a playerInput action - activate input mode
+                                if (!InventoryHelper.isActionDisabled(minecraft, action)) {
+                                    activeInput = ActiveInputState.create(i, action.label(), action.playerInput());
+                                    cursorBlinkStart = System.currentTimeMillis();
+                                }
+                                return true;
+                            } else {
+                                // Regular action click
+                                if (InventoryHelper.isActionDisabled(minecraft, action)) {
+                                    return true;
+                                }
+
+                                if (entityId != null) {
+                                    NetworkHandler.CHANNEL.sendToServer(
+                                            new ActionClickPacket(entityId, i, action.label())
+                                    );
+                                }
                                 return true;
                             }
-
-                            if (entityId != null) {
-                                NetworkHandler.CHANNEL.sendToServer(
-                                        new ActionClickPacket(entityId, i, action.label())
-                                );
-                            }
-                            return true;
                         }
 
                         buttonX += buttonWidth + BUTTON_PADDING;
@@ -272,7 +362,83 @@ public class ChatHistoryWidget extends AbstractWidget {
             y += msgHeight + MESSAGE_PADDING;
         }
 
+        // Clicked outside all buttons - cancel active input if any
+        if (activeInput != null && !clickedInsideActiveInput) {
+            activeInput = null;
+            return true;
+        }
+
         return false;
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (activeInput == null) {
+            return false;
+        }
+
+        // ESC - cancel input
+        if (keyCode == 256) { // GLFW_KEY_ESCAPE
+            activeInput = null;
+            return true;
+        }
+
+        // ENTER - submit if valid
+        if (keyCode == 257 || keyCode == 335) { // GLFW_KEY_ENTER or GLFW_KEY_KP_ENTER
+            if (activeInput.isValid() && entityId != null) {
+                NetworkHandler.CHANNEL.sendToServer(
+                        new ActionClickPacket(entityId, activeInput.messageIndex(), activeInput.actionLabel(), activeInput.text().toString())
+                );
+                activeInput = null;
+            }
+            return true;
+        }
+
+        // BACKSPACE - delete last character
+        if (keyCode == 259) { // GLFW_KEY_BACKSPACE
+            if (!activeInput.text().isEmpty()) {
+                activeInput.text().deleteCharAt(activeInput.text().length() - 1);
+                cursorBlinkStart = System.currentTimeMillis();
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (activeInput == null) {
+            return false;
+        }
+
+        // Only accept printable characters
+        if (!SharedConstants.isAllowedChatCharacter(codePoint)) {
+            return false;
+        }
+
+        // Enforce max length
+        if (activeInput.text().length() >= activeInput.config().maxLength()) {
+            return true;
+        }
+
+        activeInput.text().append(codePoint);
+        cursorBlinkStart = System.currentTimeMillis();
+        return true;
+    }
+
+    /**
+     * Returns true if an input field is currently active (for screen focus handling).
+     */
+    public boolean hasActiveInput() {
+        return activeInput != null;
+    }
+
+    /**
+     * Cancels the active input if any.
+     */
+    public void cancelInput() {
+        activeInput = null;
     }
 
     @Override

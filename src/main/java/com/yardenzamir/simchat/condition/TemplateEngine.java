@@ -108,6 +108,9 @@ public final class TemplateEngine {
         // KubeJS callback resolver
         registerResolver("kjs", (name, ctx) -> CallbackRegistry.evaluateString(name, ctx));
 
+        // Player input resolver - {input:varName} for values from playerInput actions
+        registerResolver("input", (name, ctx) -> ctx.getInputValue(name));
+
         // Player data resolver - for common player properties
         registerResolver("player", (name, ctx) -> {
             if (ctx.player() == null) return null;

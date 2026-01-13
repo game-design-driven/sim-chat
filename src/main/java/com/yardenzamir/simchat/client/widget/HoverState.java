@@ -11,14 +11,14 @@ public class HoverState {
     private @Nullable ItemStack hoveredItem = null;
     private int hoveredItemX = 0;
     private int hoveredItemY = 0;
-    private @Nullable String disabledTooltipKey = null;
+    private @Nullable Component disabledTooltip = null;
     private int tooltipX = 0;
     private int tooltipY = 0;
     private int hoveredMessageIndex = -1;
 
     public void reset() {
         hoveredItem = null;
-        disabledTooltipKey = null;
+        disabledTooltip = null;
         hoveredMessageIndex = -1;
     }
 
@@ -28,8 +28,20 @@ public class HoverState {
         this.hoveredItemY = y;
     }
 
+    /**
+     * Sets a disabled tooltip using a translation key.
+     */
     public void setDisabledTooltip(String translationKey, int x, int y) {
-        this.disabledTooltipKey = translationKey;
+        this.disabledTooltip = Component.translatable(translationKey);
+        this.tooltipX = x;
+        this.tooltipY = y;
+    }
+
+    /**
+     * Sets a disabled tooltip using a literal string (not translated).
+     */
+    public void setDisabledTooltipLiteral(String text, int x, int y) {
+        this.disabledTooltip = Component.literal(text);
         this.tooltipX = x;
         this.tooltipY = y;
     }
@@ -50,12 +62,8 @@ public class HoverState {
         return hoveredItemY;
     }
 
-    public @Nullable String getDisabledTooltipKey() {
-        return disabledTooltipKey;
-    }
-
     public @Nullable Component getDisabledTooltip() {
-        return disabledTooltipKey != null ? Component.translatable(disabledTooltipKey) : null;
+        return disabledTooltip;
     }
 
     public int getTooltipX() {
@@ -75,6 +83,6 @@ public class HoverState {
     }
 
     public boolean hasDisabledTooltip() {
-        return disabledTooltipKey != null;
+        return disabledTooltip != null;
     }
 }

@@ -28,6 +28,7 @@ public record DialogueData(
      * @param itemsOutput Items given to player on click
      * @param nextState Dialogue resource location to auto-send after this action (e.g., "mypack:npc/next")
      * @param condition Condition that must pass for action to be visible (e.g., "kjs:hasHighRep", "!flag:seen_intro")
+     * @param playerInput If present, transforms button into text input field
      */
     public record DialogueAction(
             String label,
@@ -37,7 +38,8 @@ public record DialogueData(
             List<ChatAction.ActionItem> itemsInput,
             List<ChatAction.ActionItem> itemsOutput,
             @Nullable String nextState,
-            @Nullable String condition
+            @Nullable String condition,
+            @Nullable ChatAction.PlayerInputConfig playerInput
     ) {
         private static List<ChatAction.ActionItem> parseItemArray(JsonObject json, String key) {
             List<ChatAction.ActionItem> items = new ArrayList<>();
@@ -68,8 +70,35 @@ public record DialogueData(
             List<ChatAction.ActionItem> itemsOutput = parseItemArray(json, "itemsOutput");
             String nextState = GsonHelper.getAsString(json, "nextState", null);
             String condition = GsonHelper.getAsString(json, "condition", null);
+            ChatAction.PlayerInputConfig playerInput = parsePlayerInput(json);
 
-            return new DialogueAction(label, commands, reply, itemsVisual, itemsInput, itemsOutput, nextState, condition);
+            return new DialogueAction(label, commands, reply, itemsVisual, itemsInput, itemsOutput, nextState, condition, playerInput);
+        }
+
+        private static @Nullable ChatAction.PlayerInputConfig parsePlayerInput(JsonObject json) {
+            if (!json.has("playerInput")) {
+                return null;
+            }
+
+            var element = json.get("playerInput");
+
+            // Shorthand form: "playerInput": "varName"
+            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+                return new ChatAction.PlayerInputConfig(element.getAsString());
+            }
+
+            // Full object form
+            if (element.isJsonObject()) {
+                JsonObject obj = element.getAsJsonObject();
+                String id = GsonHelper.getAsString(obj, "id");
+                int maxLength = GsonHelper.getAsInt(obj, "maxLength", ChatAction.PlayerInputConfig.DEFAULT_MAX_LENGTH);
+                String pattern = GsonHelper.getAsString(obj, "pattern", null);
+                String error = GsonHelper.getAsString(obj, "error", null);
+                boolean saveAsData = GsonHelper.getAsBoolean(obj, "saveAsData", false);
+                return new ChatAction.PlayerInputConfig(id, maxLength, pattern, error, saveAsData);
+            }
+
+            return null;
         }
     }
 
@@ -128,7 +157,7 @@ public record DialogueData(
             String processedLabel = ctx != null ? TemplateEngine.process(action.label(), ctx) : action.label();
 
             chatActions.add(new ChatAction(processedLabel, action.commands(), action.reply(),
-                    action.itemsVisual(), action.itemsInput(), action.itemsOutput(), action.nextState(), action.condition()));
+                    action.itemsVisual(), action.itemsInput(), action.itemsOutput(), action.nextState(), action.condition(), action.playerInput()));
         }
         return ChatMessage.fromEntity(resolvedEntityId, resolvedName, resolvedSubtitle, resolvedAvatar, processedText, worldDay, chatActions);
     }

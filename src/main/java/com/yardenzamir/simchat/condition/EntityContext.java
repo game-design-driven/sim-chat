@@ -5,20 +5,17 @@ import com.yardenzamir.simchat.team.TeamData;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * JS-friendly wrapper for entity/conversation data with public fields.
+ * JS-friendly wrapper for entity/conversation data.
+ * Uses getter methods for Rhino bean property access (getX -> x in JS).
  */
 public class EntityContext {
-    public final String id;
-    @Nullable
-    public final String displayName;
-    @Nullable
-    public final String imageId;
-    @Nullable
-    public final String subtitle;
-    public final int messageCount;
-    public final boolean isTyping;
-    @Nullable
-    public final String lastMessage;
+    private final String id;
+    @Nullable private final String displayName;
+    @Nullable private final String imageId;
+    @Nullable private final String subtitle;
+    private final int messageCount;
+    private final boolean typing;
+    @Nullable private final String lastMessage;
 
     public EntityContext(TeamData team, String entityId) {
         this.id = entityId;
@@ -26,10 +23,42 @@ public class EntityContext {
         this.imageId = team.getEntityImageId(entityId);
         this.subtitle = team.getEntitySubtitle(entityId);
         this.messageCount = team.getMessageCount(entityId);
-        this.isTyping = team.isTyping(entityId);
+        this.typing = team.isTyping(entityId);
 
         ChatMessage last = team.getLastMessage(entityId);
         this.lastMessage = last != null ? last.content() : null;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    @Nullable
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    @Nullable
+    public String getImageId() {
+        return imageId;
+    }
+
+    @Nullable
+    public String getSubtitle() {
+        return subtitle;
+    }
+
+    public int getMessageCount() {
+        return messageCount;
+    }
+
+    public boolean isTyping() {
+        return typing;
+    }
+
+    @Nullable
+    public String getLastMessage() {
+        return lastMessage;
     }
 
     @Nullable

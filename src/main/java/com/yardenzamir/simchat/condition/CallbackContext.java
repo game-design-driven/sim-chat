@@ -6,36 +6,45 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Context passed to KubeJS callbacks.
+ * Uses getter methods for Rhino/KubeJS compatibility (getX -> x property in JS).
  *
- * Only wraps SimChat-specific data. Use player for Minecraft data:
- *   ctx.player.level.dayTime
- *   ctx.player.persistentData
- *   ctx.player.inventory
- *   etc.
+ * Access in JS:
+ *   ctx.player.inventory.items
+ *   ctx.player.persistentData.getInt('key')
+ *   ctx.team.data.myKey
+ *   ctx.entity.displayName
  */
 public class CallbackContext {
-    /** Minecraft player - KubeJS wraps this with full property access */
-    public final ServerPlayer player;
-
-    /** Team data wrapper (null if no team) */
-    @Nullable
-    public final TeamContext team;
-
-    /** Current entity/conversation data wrapper (null if no entity context) */
-    @Nullable
-    public final EntityContext entity;
-
-    // Raw TeamData for Java code
-    @Nullable
-    private final TeamData teamData;
+    private final ServerPlayer player;
+    @Nullable private final TeamData teamData;
+    @Nullable private final TeamContext teamContext;
+    @Nullable private final EntityContext entityContext;
 
     public CallbackContext(ServerPlayer player, @Nullable TeamData team, @Nullable String entityId) {
         this.player = player;
         this.teamData = team;
-        this.team = TeamContext.of(team);
-        this.entity = EntityContext.of(team, entityId);
+        this.teamContext = TeamContext.of(team);
+        this.entityContext = EntityContext.of(team, entityId);
     }
 
+    /** Get the player - accessible as ctx.player in JS */
+    public ServerPlayer getPlayer() {
+        return player;
+    }
+
+    /** Get team context - accessible as ctx.team in JS */
+    @Nullable
+    public TeamContext getTeam() {
+        return teamContext;
+    }
+
+    /** Get entity context - accessible as ctx.entity in JS */
+    @Nullable
+    public EntityContext getEntity() {
+        return entityContext;
+    }
+
+    // Factory methods
     public static CallbackContext of(ServerPlayer player, @Nullable TeamData team, @Nullable String entityId) {
         return new CallbackContext(player, team, entityId);
     }
@@ -44,7 +53,7 @@ public class CallbackContext {
         return of(player, null, null);
     }
 
-    // Java code compatibility
+    // Java code compatibility (for TemplateEngine, ConditionEvaluator)
     public ServerPlayer player() { return player; }
     @Nullable public TeamData team() { return teamData; }
 }

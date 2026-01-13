@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.data.MessageType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -24,7 +25,7 @@ public class TeamData {
     private int color;
     private final Set<UUID> members = new HashSet<>();
     private final Map<String, List<ChatMessage>> conversations = new LinkedHashMap<>();
-    private final Map<String, String> flags = new HashMap<>();
+    private final Map<String, Object> data = new HashMap<>();
     private final transient Set<String> typingEntities = new HashSet<>();
     private int revision = 0;
 
@@ -78,6 +79,11 @@ public class TeamData {
         revision++;
     }
 
+    public void setColor(int color) {
+        this.color = Math.max(0, Math.min(15, color));
+        revision++;
+    }
+
     // === Membership ===
 
     public void addMember(UUID playerId) {
@@ -103,7 +109,14 @@ public class TeamData {
     // === Conversations ===
 
     public void addMessage(ChatMessage message) {
-        conversations.computeIfAbsent(message.entityId(), k -> new ArrayList<>()).add(message);
+        String entityId = message.entityId();
+        // Remove and re-add to update insertion order in LinkedHashMap (most recent last)
+        List<ChatMessage> msgs = conversations.remove(entityId);
+        if (msgs == null) {
+            msgs = new ArrayList<>();
+        }
+        msgs.add(message);
+        conversations.put(entityId, msgs);
         revision++;
     }
 
@@ -117,22 +130,11 @@ public class TeamData {
     }
 
     /**
-     * Gets entity IDs ordered by most recent message.
+     * Gets entity IDs ordered by most recent message (reverse insertion order).
      */
     public List<String> getEntityIds() {
-        Map<String, List<ChatMessage>> snapshot = new LinkedHashMap<>(conversations);
-        List<Map.Entry<String, List<ChatMessage>>> entries = new ArrayList<>(snapshot.entrySet());
-
-        entries.sort((a, b) -> {
-            long timeA = a.getValue().isEmpty() ? 0 : a.getValue().get(a.getValue().size() - 1).timestamp();
-            long timeB = b.getValue().isEmpty() ? 0 : b.getValue().get(b.getValue().size() - 1).timestamp();
-            return Long.compare(timeB, timeA);
-        });
-
-        List<String> result = new ArrayList<>();
-        for (Map.Entry<String, List<ChatMessage>> entry : entries) {
-            result.add(entry.getKey());
-        }
+        List<String> result = new ArrayList<>(conversations.keySet());
+        Collections.reverse(result);
         return result;
     }
 
@@ -223,16 +225,17 @@ public class TeamData {
 
     // === Typing ===
 
+    /**
+     * Sets typing state for an entity.
+     * Note: Does NOT increment revision since typing is transient UI state
+     * and revision is used for data sync detection.
+     */
     public void setTyping(String entityId, boolean typing) {
         if (typing) {
-            if (typingEntities.add(entityId)) {
-                conversations.computeIfAbsent(entityId, k -> new ArrayList<>());
-                revision++;
-            }
+            typingEntities.add(entityId);
+            conversations.computeIfAbsent(entityId, k -> new ArrayList<>());
         } else {
-            if (typingEntities.remove(entityId)) {
-                revision++;
-            }
+            typingEntities.remove(entityId);
         }
     }
 
@@ -240,25 +243,93 @@ public class TeamData {
         return typingEntities.contains(entityId);
     }
 
-    // === Flags ===
+    // === Data ===
 
-    public void setFlag(String key, String value) {
-        flags.put(key, value);
+    /**
+     * Sets a data value (string or number).
+     */
+    public void setData(String key, Object value) {
+        data.put(key, value);
         revision++;
     }
 
-    public @Nullable String getFlag(String key) {
-        return flags.get(key);
+    /**
+     * Gets a data value, or null if not set.
+     */
+    @Nullable
+    public Object getData(String key) {
+        return data.get(key);
     }
 
-    public void removeFlag(String key) {
-        if (flags.remove(key) != null) {
+    /**
+     * Gets a data value as string.
+     */
+    public String getDataString(String key, String defaultValue) {
+        Object val = data.get(key);
+        return val != null ? val.toString() : defaultValue;
+    }
+
+    /**
+     * Gets a data value as number.
+     */
+    public double getDataNumber(String key, double defaultValue) {
+        Object val = data.get(key);
+        if (val instanceof Number n) return n.doubleValue();
+        if (val instanceof String s) {
+            try { return Double.parseDouble(s); } catch (NumberFormatException e) { return defaultValue; }
+        }
+        return defaultValue;
+    }
+
+    /**
+     * Gets a data value as int.
+     */
+    public int getDataInt(String key, int defaultValue) {
+        return (int) getDataNumber(key, defaultValue);
+    }
+
+    /**
+     * Adds to a numeric data value (creates if doesn't exist).
+     */
+    public void addData(String key, double amount) {
+        double current = getDataNumber(key, 0);
+        data.put(key, current + amount);
+        revision++;
+    }
+
+    /**
+     * Checks if data key exists and is truthy (non-null, non-zero, non-empty).
+     */
+    public boolean hasData(String key) {
+        Object val = data.get(key);
+        if (val == null) return false;
+        if (val instanceof Boolean b) return b;
+        if (val instanceof Number n) return n.doubleValue() != 0;
+        if (val instanceof String s) return !s.isEmpty();
+        return true;
+    }
+
+    /**
+     * Removes a data key.
+     */
+    public void removeData(String key) {
+        if (data.remove(key) != null) {
             revision++;
         }
     }
 
-    public Map<String, String> getFlags() {
-        return Collections.unmodifiableMap(flags);
+    /**
+     * Gets all data keys.
+     */
+    public Set<String> getDataKeys() {
+        return Collections.unmodifiableSet(data.keySet());
+    }
+
+    /**
+     * Gets all data as unmodifiable map.
+     */
+    public Map<String, Object> getAllData() {
+        return Collections.unmodifiableMap(data);
     }
 
     // === JSON Serialization ===
@@ -285,11 +356,16 @@ public class TeamData {
         }
         json.add("conversations", convsObject);
 
-        JsonObject flagsObject = new JsonObject();
-        for (Map.Entry<String, String> entry : flags.entrySet()) {
-            flagsObject.addProperty(entry.getKey(), entry.getValue());
+        JsonObject dataObject = new JsonObject();
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            Object val = entry.getValue();
+            if (val instanceof Number n) {
+                dataObject.addProperty(entry.getKey(), n);
+            } else {
+                dataObject.addProperty(entry.getKey(), val.toString());
+            }
         }
-        json.add("flags", flagsObject);
+        json.add("data", dataObject);
 
         return json;
     }
@@ -319,10 +395,15 @@ public class TeamData {
             }
         }
 
-        if (json.has("flags")) {
-            JsonObject flagsObject = GsonHelper.getAsJsonObject(json, "flags");
-            for (Map.Entry<String, JsonElement> entry : flagsObject.entrySet()) {
-                team.flags.put(entry.getKey(), entry.getValue().getAsString());
+        if (json.has("data")) {
+            JsonObject dataObject = GsonHelper.getAsJsonObject(json, "data");
+            for (Map.Entry<String, JsonElement> entry : dataObject.entrySet()) {
+                JsonElement val = entry.getValue();
+                if (val.isJsonPrimitive() && val.getAsJsonPrimitive().isNumber()) {
+                    team.data.put(entry.getKey(), val.getAsDouble());
+                } else {
+                    team.data.put(entry.getKey(), val.getAsString());
+                }
             }
         }
 
@@ -351,11 +432,16 @@ public class TeamData {
         }
         tag.put("conversations", convList);
 
-        CompoundTag flagsTag = new CompoundTag();
-        for (Map.Entry<String, String> entry : flags.entrySet()) {
-            flagsTag.putString(entry.getKey(), entry.getValue());
+        CompoundTag dataTag = new CompoundTag();
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            Object val = entry.getValue();
+            if (val instanceof Number n) {
+                dataTag.putDouble(entry.getKey(), n.doubleValue());
+            } else {
+                dataTag.putString(entry.getKey(), val.toString());
+            }
         }
-        tag.put("flags", flagsTag);
+        tag.put("data", dataTag);
 
         return tag;
     }
@@ -381,10 +467,15 @@ public class TeamData {
             }
         }
 
-        if (tag.contains("flags")) {
-            CompoundTag flagsTag = tag.getCompound("flags");
-            for (String key : flagsTag.getAllKeys()) {
-                team.flags.put(key, flagsTag.getString(key));
+        if (tag.contains("data")) {
+            CompoundTag dataTag = tag.getCompound("data");
+            for (String key : dataTag.getAllKeys()) {
+                byte type = dataTag.getTagType(key);
+                if (type == Tag.TAG_DOUBLE || type == Tag.TAG_FLOAT || type == Tag.TAG_INT || type == Tag.TAG_LONG) {
+                    team.data.put(key, dataTag.getDouble(key));
+                } else {
+                    team.data.put(key, dataTag.getString(key));
+                }
             }
         }
 
@@ -395,8 +486,7 @@ public class TeamData {
 
     private static JsonObject messageToJson(ChatMessage msg) {
         JsonObject json = new JsonObject();
-        json.addProperty("isPlayer", msg.isPlayerMessage());
-        json.addProperty("isSystem", msg.isSystemMessage());
+        json.addProperty("type", msg.type().name());
         json.addProperty("entityId", msg.entityId());
         json.addProperty("senderName", msg.senderName());
         if (msg.senderSubtitle() != null) {
@@ -433,8 +523,14 @@ public class TeamData {
         // Delegate to ChatMessage's NBT since structure is similar
         // Convert JSON to NBT-like structure
         CompoundTag tag = new CompoundTag();
-        tag.putBoolean("isPlayer", GsonHelper.getAsBoolean(json, "isPlayer", false));
-        tag.putBoolean("isSystem", GsonHelper.getAsBoolean(json, "isSystem", false));
+        String typeName = GsonHelper.getAsString(json, "type", "ENTITY");
+        MessageType type;
+        try {
+            type = MessageType.valueOf(typeName);
+        } catch (IllegalArgumentException e) {
+            type = MessageType.ENTITY;
+        }
+        tag.putInt("type", type.ordinal());
         tag.putString("entityId", GsonHelper.getAsString(json, "entityId", ""));
         tag.putString("senderName", GsonHelper.getAsString(json, "senderName", ""));
         if (json.has("senderSubtitle")) {
@@ -446,7 +542,7 @@ public class TeamData {
         tag.putString("content", GsonHelper.getAsString(json, "content", ""));
         tag.putLong("worldDay", GsonHelper.getAsLong(json, "worldDay", 0));
         if (json.has("playerUuid")) {
-            tag.putString("playerUuid", GsonHelper.getAsString(json, "playerUuid"));
+            tag.putUUID("playerUuid", UUID.fromString(GsonHelper.getAsString(json, "playerUuid")));
         }
 
         if (json.has("actions")) {
@@ -491,6 +587,9 @@ public class TeamData {
         if (action.nextState() != null) {
             json.addProperty("nextState", action.nextState());
         }
+        if (action.condition() != null) {
+            json.addProperty("condition", action.condition());
+        }
         return json;
     }
 
@@ -518,6 +617,9 @@ public class TeamData {
         }
         if (json.has("nextState")) {
             tag.putString("nextState", GsonHelper.getAsString(json, "nextState"));
+        }
+        if (json.has("condition")) {
+            tag.putString("condition", GsonHelper.getAsString(json, "condition"));
         }
         return tag;
     }

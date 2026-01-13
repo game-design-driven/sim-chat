@@ -2,15 +2,18 @@ package com.yardenzamir.simchat.command;
 
 import com.yardenzamir.simchat.SimChatMod;
 import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.condition.CallbackContext;
 import com.yardenzamir.simchat.config.ServerConfig;
 import com.yardenzamir.simchat.data.ChatMessage;
 import com.yardenzamir.simchat.data.DialogueData;
 import com.yardenzamir.simchat.data.DialogueManager;
 import com.yardenzamir.simchat.data.PlayerChatData;
 import com.yardenzamir.simchat.network.NetworkHandler;
+import com.yardenzamir.simchat.integration.kubejs.KubeJSIntegration;
 import com.yardenzamir.simchat.team.SimChatTeamManager;
 import com.yardenzamir.simchat.team.TeamData;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -74,8 +77,9 @@ public class SimChatCommands {
                         .then(Commands.literal("create")
                                 .then(Commands.argument("title", StringArgumentType.greedyString())
                                         .executes(SimChatCommands::teamCreate)))
-                        // team invite <player>
+                        // team invite [player] - if no player, broadcast to all
                         .then(Commands.literal("invite")
+                                .executes(SimChatCommands::teamInviteBroadcast)
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .executes(SimChatCommands::teamInvite)))
                         // team join <id_or_name>
@@ -96,7 +100,64 @@ public class SimChatCommands {
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .requires(source -> source.hasPermission(2))
                                         .then(Commands.argument("title", StringArgumentType.greedyString())
-                                                .executes(SimChatCommands::teamTitleAdmin)))))
+                                                .executes(SimChatCommands::teamTitleAdmin))))
+                        // team color <color>
+                        .then(Commands.literal("color")
+                                .then(Commands.argument("color", StringArgumentType.word())
+                                        .suggests(SimChatCommands::suggestColors)
+                                        .executes(SimChatCommands::teamColor))))
+                // reload - re-fire KubeJS callback registration
+                .then(Commands.literal("reload")
+                        .requires(source -> source.hasPermission(2))
+                        .executes(SimChatCommands::reloadCallbacks))
+                // callback subcommands for KubeJS callbacks
+                .then(Commands.literal("callback")
+                        .requires(source -> source.hasPermission(2))
+                        // callback list - list all registered callbacks
+                        .then(Commands.literal("list")
+                                .executes(SimChatCommands::callbackList))
+                        // callback run <name> [player] - run a callback and show result
+                        .then(Commands.literal("run")
+                                .then(Commands.argument("name", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                                com.yardenzamir.simchat.condition.CallbackRegistry.getCallbackNames(), builder))
+                                        .executes(SimChatCommands::callbackRunSelf)
+                                        .then(Commands.argument("player", EntityArgument.player())
+                                                .executes(SimChatCommands::callbackRunPlayer)))))
+                // data subcommands for team data - all accept optional [target] (player or team)
+                .then(Commands.literal("data")
+                        .requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("get")
+                                .then(Commands.argument("key", StringArgumentType.word())
+                                        .executes(SimChatCommands::dataGetSelf)
+                                        .then(Commands.argument("target", StringArgumentType.greedyString())
+                                                .suggests(SimChatCommands::suggestTargets)
+                                                .executes(SimChatCommands::dataGetTarget))))
+                        .then(Commands.literal("set")
+                                .then(Commands.argument("key", StringArgumentType.word())
+                                        .then(Commands.argument("value", StringArgumentType.string())
+                                                .executes(SimChatCommands::dataSetSelf)
+                                                .then(Commands.argument("target", StringArgumentType.greedyString())
+                                                        .suggests(SimChatCommands::suggestTargets)
+                                                        .executes(SimChatCommands::dataSetTarget)))))
+                        .then(Commands.literal("add")
+                                .then(Commands.argument("key", StringArgumentType.word())
+                                        .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
+                                                .executes(SimChatCommands::dataAddSelf)
+                                                .then(Commands.argument("target", StringArgumentType.greedyString())
+                                                        .suggests(SimChatCommands::suggestTargets)
+                                                        .executes(SimChatCommands::dataAddTarget)))))
+                        .then(Commands.literal("remove")
+                                .then(Commands.argument("key", StringArgumentType.word())
+                                        .executes(SimChatCommands::dataRemoveSelf)
+                                        .then(Commands.argument("target", StringArgumentType.greedyString())
+                                                .suggests(SimChatCommands::suggestTargets)
+                                                .executes(SimChatCommands::dataRemoveTarget))))
+                        .then(Commands.literal("list")
+                                .executes(SimChatCommands::dataListSelf)
+                                .then(Commands.argument("target", StringArgumentType.greedyString())
+                                        .suggests(SimChatCommands::suggestTargets)
+                                        .executes(SimChatCommands::dataListTarget))))
         );
     }
 
@@ -129,7 +190,10 @@ public class SimChatCommands {
         }
 
         long worldDay = getWorldDay(player);
-        ChatMessage message = dialogue.toMessage(dialogue.entityId(), worldDay);
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        CallbackContext callbackCtx = new CallbackContext(player, team, dialogue.entityId());
+        ChatMessage message = dialogue.toMessage(dialogue.entityId(), worldDay, callbackCtx);
 
         float delay = calculateDelay(dialogue.text());
         int delayTicks = (int) (delay * 20);
@@ -250,20 +314,49 @@ public class SimChatCommands {
             return 0;
         }
 
-        // Build clickable message for invitee
+        Component message = buildInviteMessage(inviter, team);
+        invitee.sendSystemMessage(message);
+        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.invited", invitee.getName().getString()), false);
+        return 1;
+    }
+
+    private static int teamInviteBroadcast(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer inviter = ctx.getSource().getPlayerOrException();
+
+        SimChatTeamManager manager = SimChatTeamManager.get(inviter.server);
+        TeamData team = manager.getPlayerTeam(inviter);
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.not_in_team"));
+            return 0;
+        }
+
+        Component message = buildInviteMessage(inviter, team);
+
+        // Send to all players except the inviter
+        int count = 0;
+        for (ServerPlayer player : inviter.server.getPlayerList().getPlayers()) {
+            if (!player.equals(inviter)) {
+                player.sendSystemMessage(message);
+                count++;
+            }
+        }
+
+        int finalCount = count;
+        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.invited_all", finalCount), false);
+        return 1;
+    }
+
+    private static Component buildInviteMessage(ServerPlayer inviter, TeamData team) {
         Component joinButton = Component.translatable("simchat.command.team.invite_button")
                 .withStyle(Style.EMPTY
                         .withColor(0x55FF55)
+                        .withBold(true)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/simchat team join " + team.getId()))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.translatable("simchat.command.team.invite_hover", team.getTitle()))));
 
-        Component message = Component.translatable("simchat.command.team.invite_message", inviter.getName().getString(), team.getTitle())
+        return Component.translatable("simchat.command.team.invite_message", inviter.getName().getString(), team.getTitle())
                 .append(joinButton);
-
-        invitee.sendSystemMessage(message);
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.invited", invitee.getName().getString()), false);
-        return 1;
     }
 
     private static CompletableFuture<Suggestions> suggestTeams(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
@@ -305,11 +398,23 @@ public class SimChatCommands {
 
     private static int teamList(CommandContext<CommandSourceStack> ctx) {
         SimChatTeamManager manager = SimChatTeamManager.get(ctx.getSource().getServer());
+        var teams = manager.getAllTeams();
 
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.list_header"), false);
-        for (TeamData team : manager.getAllTeams()) {
-            ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.list_entry",
-                    team.getTitle(), team.getId(), team.getMemberCount()), false);
+        ctx.getSource().sendSuccess(() -> Component.literal("Teams (" + teams.size() + ")")
+                .withStyle(Style.EMPTY.withColor(0x55FFFF).withBold(true)), false);
+
+        for (TeamData team : teams) {
+            Component titleComp = Component.literal(team.getTitle()).withStyle(Style.EMPTY.withColor(0xFFFFFF));
+            Component idComp = Component.literal(team.getId()).withStyle(Style.EMPTY.withColor(0xAAAAAA));
+            Component membersComp = Component.literal(String.valueOf(team.getMemberCount()))
+                    .withStyle(Style.EMPTY.withColor(0x55FF55));
+            ctx.getSource().sendSuccess(() -> Component.literal("  ")
+                    .append(titleComp)
+                    .append(Component.literal(" (").withStyle(Style.EMPTY.withColor(0x555555)))
+                    .append(idComp)
+                    .append(Component.literal(") - ").withStyle(Style.EMPTY.withColor(0x555555)))
+                    .append(membersComp)
+                    .append(Component.literal(" members").withStyle(Style.EMPTY.withColor(0x555555))), false);
         }
         return 1;
     }
@@ -324,11 +429,30 @@ public class SimChatCommands {
             return 0;
         }
 
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.info_header"), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.info_title", team.getTitle()), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.info_id", team.getId()), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.info_members", team.getMemberCount()), false);
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.info_conversations", team.getEntityIds().size()), false);
+        Component titleComp = Component.literal(team.getTitle()).withStyle(Style.EMPTY.withColor(0x55FFFF).withBold(true));
+        ctx.getSource().sendSuccess(() -> titleComp, false);
+
+        Component idLabel = Component.literal("  ID: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
+        Component idVal = Component.literal(team.getId()).withStyle(Style.EMPTY.withColor(0xFFFFFF));
+        ctx.getSource().sendSuccess(() -> idLabel.copy().append(idVal), false);
+
+        Component membersLabel = Component.literal("  Members: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
+        Component membersVal = Component.literal(String.valueOf(team.getMemberCount())).withStyle(Style.EMPTY.withColor(0x55FF55));
+        ctx.getSource().sendSuccess(() -> membersLabel.copy().append(membersVal), false);
+
+        Component colorLabel = Component.literal("  Color: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
+        Component colorVal = Component.literal(COLOR_NAMES[team.getColor()]).withStyle(Style.EMPTY.withColor(0xFFAA00));
+        ctx.getSource().sendSuccess(() -> colorLabel.copy().append(colorVal), false);
+
+        Component convsLabel = Component.literal("  Conversations: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
+        Component convsVal = Component.literal(String.valueOf(team.getEntityIds().size())).withStyle(Style.EMPTY.withColor(0x55FF55));
+        ctx.getSource().sendSuccess(() -> convsLabel.copy().append(convsVal), false);
+
+        int dataCount = team.getAllData().size();
+        Component dataLabel = Component.literal("  Data keys: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
+        Component dataVal = Component.literal(String.valueOf(dataCount)).withStyle(Style.EMPTY.withColor(0x55FF55));
+        ctx.getSource().sendSuccess(() -> dataLabel.copy().append(dataVal), false);
+
         return 1;
     }
 
@@ -370,6 +494,338 @@ public class SimChatCommands {
 
         ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.title_changed_admin",
                 targetPlayer.getName().getString(), newTitle), false);
+        return 1;
+    }
+
+    private static final String[] COLOR_NAMES = {
+            "black", "dark_blue", "dark_green", "dark_aqua",
+            "dark_red", "dark_purple", "gold", "gray",
+            "dark_gray", "blue", "green", "aqua",
+            "red", "light_purple", "yellow", "white"
+    };
+
+    private static CompletableFuture<Suggestions> suggestColors(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        for (String color : COLOR_NAMES) {
+            builder.suggest(color);
+        }
+        for (int i = 0; i <= 15; i++) {
+            builder.suggest(String.valueOf(i));
+        }
+        return builder.buildFuture();
+    }
+
+    private static int parseColor(String input) {
+        // Try as number
+        try {
+            int num = Integer.parseInt(input);
+            return Math.max(0, Math.min(15, num));
+        } catch (NumberFormatException ignored) {}
+
+        // Try as color name
+        String lower = input.toLowerCase();
+        for (int i = 0; i < COLOR_NAMES.length; i++) {
+            if (COLOR_NAMES[i].equals(lower)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static int teamColor(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String colorInput = StringArgumentType.getString(ctx, "color");
+
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.not_in_team"));
+            return 0;
+        }
+
+        int colorIndex = parseColor(colorInput);
+        if (colorIndex < 0) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.invalid_color", colorInput));
+            return 0;
+        }
+
+        team.setColor(colorIndex);
+        manager.saveTeam(team);
+        manager.updateVanillaTeamColor(team);
+        NetworkHandler.syncTeamToAllMembers(team, player.server);
+
+        String colorName = COLOR_NAMES[colorIndex];
+        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.color_changed", colorName), false);
+        return 1;
+    }
+
+    private static int reloadCallbacks(CommandContext<CommandSourceStack> ctx) {
+        KubeJSIntegration.fireRegisterCallbacksEvent();
+        int count = com.yardenzamir.simchat.condition.CallbackRegistry.size();
+        ctx.getSource().sendSuccess(() -> Component.literal("Reloaded ")
+                .withStyle(Style.EMPTY.withColor(0x55FF55))
+                .append(Component.literal(String.valueOf(count)).withStyle(Style.EMPTY.withColor(0xFFFFFF).withBold(true)))
+                .append(Component.literal(" callbacks").withStyle(Style.EMPTY.withColor(0x55FF55))), false);
+        return 1;
+    }
+
+    private static int callbackList(CommandContext<CommandSourceStack> ctx) {
+        var names = com.yardenzamir.simchat.condition.CallbackRegistry.getCallbackNames();
+
+        ctx.getSource().sendSuccess(() -> Component.literal("Callbacks (" + names.size() + ")")
+                .withStyle(Style.EMPTY.withColor(0x55FFFF).withBold(true)), false);
+
+        if (names.isEmpty()) {
+            ctx.getSource().sendSuccess(() -> Component.literal("  (none registered)")
+                    .withStyle(Style.EMPTY.withColor(0x555555)), false);
+        } else {
+            for (String name : names) {
+                ctx.getSource().sendSuccess(() -> Component.literal("  ")
+                        .append(Component.literal(name).withStyle(Style.EMPTY.withColor(0xFFAA00))), false);
+            }
+        }
+        return 1;
+    }
+
+    private static int callbackRunSelf(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        return runCallback(ctx, player);
+    }
+
+    private static int callbackRunPlayer(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
+        return runCallback(ctx, player);
+    }
+
+    private static int runCallback(CommandContext<CommandSourceStack> ctx, ServerPlayer player) {
+        String callbackName = StringArgumentType.getString(ctx, "name");
+
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+
+        CallbackContext callbackCtx = new CallbackContext(player, team, null);
+        Object result = com.yardenzamir.simchat.condition.CallbackRegistry.evaluate(callbackName, callbackCtx);
+
+        Component nameComp = Component.literal(callbackName).withStyle(Style.EMPTY.withColor(0xFFAA00));
+        Component playerComp = Component.literal(player.getName().getString()).withStyle(Style.EMPTY.withColor(0x55FFFF));
+
+        if (result == null) {
+            ctx.getSource().sendSuccess(() -> nameComp.copy()
+                    .append(Component.literal("(").withStyle(Style.EMPTY.withColor(0x555555)))
+                    .append(playerComp)
+                    .append(Component.literal(") = ").withStyle(Style.EMPTY.withColor(0x555555)))
+                    .append(Component.literal("null").withStyle(Style.EMPTY.withColor(0xAAAAAA))), false);
+            return 1;
+        }
+
+        String resultStr = result.toString();
+        int color = result instanceof Boolean b ? (b ? 0x55FF55 : 0xFF5555) : 0x55FF55;
+        ctx.getSource().sendSuccess(() -> nameComp.copy()
+                .append(Component.literal("(").withStyle(Style.EMPTY.withColor(0x555555)))
+                .append(playerComp)
+                .append(Component.literal(") = ").withStyle(Style.EMPTY.withColor(0x555555)))
+                .append(Component.literal(resultStr).withStyle(Style.EMPTY.withColor(color))), false);
+        return 1;
+    }
+
+    // === Data Commands ===
+
+    private static CompletableFuture<Suggestions> suggestTargets(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        var server = ctx.getSource().getServer();
+        // Suggest online players
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            builder.suggest(player.getName().getString());
+        }
+        // Suggest teams
+        SimChatTeamManager manager = SimChatTeamManager.get(server);
+        for (TeamData team : manager.getAllTeams()) {
+            builder.suggest(team.getId());
+            String title = team.getTitle();
+            if (title.contains(" ")) {
+                builder.suggest("\"" + title + "\"");
+            } else {
+                builder.suggest(title);
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    /**
+     * Resolves a target string to a TeamData.
+     * Tries: online player by name -> team by ID -> team by title
+     */
+    private static TeamData resolveTarget(CommandSourceStack source, String target) {
+        var server = source.getServer();
+        SimChatTeamManager manager = SimChatTeamManager.get(server);
+
+        // Remove quotes if present
+        if (target.startsWith("\"") && target.endsWith("\"")) {
+            target = target.substring(1, target.length() - 1);
+        }
+
+        // Try as online player name
+        ServerPlayer player = server.getPlayerList().getPlayerByName(target);
+        if (player != null) {
+            return manager.getPlayerTeam(player);
+        }
+
+        // Try as team ID or title
+        return manager.findTeam(target);
+    }
+
+    private static int dataGetSelf(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        return dataGetImpl(ctx, team, null);
+    }
+
+    private static int dataGetTarget(CommandContext<CommandSourceStack> ctx) {
+        String target = StringArgumentType.getString(ctx, "target");
+        TeamData team = resolveTarget(ctx.getSource(), target);
+        return dataGetImpl(ctx, team, target);
+    }
+
+    private static int dataGetImpl(CommandContext<CommandSourceStack> ctx, TeamData team, String targetName) {
+        String key = StringArgumentType.getString(ctx, "key");
+
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.target_no_team", targetName != null ? targetName : "You"));
+            return 0;
+        }
+
+        Object val = team.getData(key);
+        String valStr = val != null ? (val instanceof Double d && d == Math.floor(d) ? String.valueOf(d.longValue()) : val.toString()) : "null";
+        ctx.getSource().sendSuccess(() -> Component.literal(valStr), false);
+        return 1;
+    }
+
+    private static int dataSetSelf(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        return dataSetImpl(ctx, team, null);
+    }
+
+    private static int dataSetTarget(CommandContext<CommandSourceStack> ctx) {
+        String target = StringArgumentType.getString(ctx, "target");
+        TeamData team = resolveTarget(ctx.getSource(), target);
+        return dataSetImpl(ctx, team, target);
+    }
+
+    private static int dataSetImpl(CommandContext<CommandSourceStack> ctx, TeamData team, String targetName) {
+        String key = StringArgumentType.getString(ctx, "key");
+        String valueStr = StringArgumentType.getString(ctx, "value");
+
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.target_no_team", targetName != null ? targetName : "You"));
+            return 0;
+        }
+
+        // Auto-detect: try parsing as number first
+        String displayVal;
+        try {
+            double numVal = Double.parseDouble(valueStr);
+            team.setData(key, numVal);
+            displayVal = numVal == Math.floor(numVal) ? String.valueOf((long) numVal) : String.valueOf(numVal);
+        } catch (NumberFormatException e) {
+            team.setData(key, valueStr);
+            displayVal = valueStr;
+        }
+
+        SimChatTeamManager.get(ctx.getSource().getServer()).saveTeam(team);
+
+        String finalDisplayVal = displayVal;
+        ctx.getSource().sendSuccess(() -> Component.literal(finalDisplayVal), false);
+        return 1;
+    }
+
+    private static int dataAddSelf(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        return dataAddImpl(ctx, team, null);
+    }
+
+    private static int dataAddTarget(CommandContext<CommandSourceStack> ctx) {
+        String target = StringArgumentType.getString(ctx, "target");
+        TeamData team = resolveTarget(ctx.getSource(), target);
+        return dataAddImpl(ctx, team, target);
+    }
+
+    private static int dataAddImpl(CommandContext<CommandSourceStack> ctx, TeamData team, String targetName) {
+        String key = StringArgumentType.getString(ctx, "key");
+        double amount = DoubleArgumentType.getDouble(ctx, "amount");
+
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.target_no_team", targetName != null ? targetName : "You"));
+            return 0;
+        }
+
+        team.addData(key, amount);
+        SimChatTeamManager.get(ctx.getSource().getServer()).saveTeam(team);
+        double newVal = team.getDataNumber(key, 0);
+
+        String newStr = newVal == Math.floor(newVal) ? String.valueOf((long) newVal) : String.valueOf(newVal);
+        ctx.getSource().sendSuccess(() -> Component.literal(newStr), false);
+        return 1;
+    }
+
+    private static int dataRemoveSelf(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        return dataRemoveImpl(ctx, team, null);
+    }
+
+    private static int dataRemoveTarget(CommandContext<CommandSourceStack> ctx) {
+        String target = StringArgumentType.getString(ctx, "target");
+        TeamData team = resolveTarget(ctx.getSource(), target);
+        return dataRemoveImpl(ctx, team, target);
+    }
+
+    private static int dataRemoveImpl(CommandContext<CommandSourceStack> ctx, TeamData team, String targetName) {
+        String key = StringArgumentType.getString(ctx, "key");
+
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.target_no_team", targetName != null ? targetName : "You"));
+            return 0;
+        }
+
+        team.removeData(key);
+        SimChatTeamManager.get(ctx.getSource().getServer()).saveTeam(team);
+        return 1;
+    }
+
+    private static int dataListSelf(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        return dataListImpl(ctx, team, null);
+    }
+
+    private static int dataListTarget(CommandContext<CommandSourceStack> ctx) {
+        String target = StringArgumentType.getString(ctx, "target");
+        TeamData team = resolveTarget(ctx.getSource(), target);
+        return dataListImpl(ctx, team, target);
+    }
+
+    private static int dataListImpl(CommandContext<CommandSourceStack> ctx, TeamData team, String targetName) {
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.target_no_team", targetName != null ? targetName : "You"));
+            return 0;
+        }
+
+        var data = team.getAllData();
+        if (data.isEmpty()) {
+            return 1;
+        }
+
+        for (var entry : data.entrySet()) {
+            String k = entry.getKey();
+            Object v = entry.getValue();
+            String vStr = v instanceof Double d && d == Math.floor(d) ? String.valueOf(d.longValue()) : v.toString();
+            ctx.getSource().sendSuccess(() -> Component.literal(k + "=" + vStr), false);
+        }
         return 1;
     }
 }

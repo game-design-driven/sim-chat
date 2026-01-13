@@ -23,6 +23,8 @@
   "simchat.command.error.no_team": "Player has no team",
   "simchat.command.error.not_in_team": "You are not in a team",
   "simchat.command.error.team_not_found": "Team not found: %s",
+  "simchat.command.error.invalid_color": "Invalid color: %s",
+  "simchat.command.error.target_no_team": "%s has no team",
 
   "simchat.command.send.success": "Sending dialogue %s to %s",
   "simchat.command.clear.all": "Cleared all conversations for team %s",
@@ -31,8 +33,10 @@
   "simchat.command.team.created": "Created and joined team '%s' (ID: %s)",
   "simchat.command.team.joined": "Joined team '%s'",
   "simchat.command.team.invited": "Invited %s to your team",
+  "simchat.command.team.invited_all": "Invite sent to %d players",
   "simchat.command.team.title_changed": "Team title changed to '%s'",
   "simchat.command.team.title_changed_admin": "Team title for %s changed to '%s'",
+  "simchat.command.team.color_changed": "Team color changed to %s",
 
   "simchat.command.team.invite_button": "[Join Team]",
   "simchat.command.team.invite_hover": "Click to join team %s",

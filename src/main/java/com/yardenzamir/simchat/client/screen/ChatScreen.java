@@ -37,6 +37,7 @@ public class ChatScreen extends Screen {
     private @Nullable String lastTeamId;
     private int lastTeamRevision = -1;
     private int lastReadRevision = -1;
+    private boolean lastTypingState = false;
 
     private int sidebarWidth;
     private boolean draggingDivider = false;
@@ -187,6 +188,9 @@ public class ChatScreen extends Screen {
         // Mark as read
         readData.markAsRead(entityId, totalMessages);
         NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(entityId));
+
+        // Track typing state for change detection
+        lastTypingState = team.isTyping(entityId);
     }
 
     private void refreshChatHistory() {
@@ -343,11 +347,12 @@ public class ChatScreen extends Screen {
 
         PlayerChatData readData = ChatCapability.getOrThrow(minecraft.player);
 
-        // Check if team changed (different team ID) or data changed (revision)
+        // Check if team changed (different team ID) or data changed (revision) or typing state changed
         boolean teamChanged = !team.getId().equals(lastTeamId);
         boolean dataChanged = team.getRevision() != lastTeamRevision || readData.getRevision() != lastReadRevision;
+        boolean typingChanged = selectedEntityId != null && team.isTyping(selectedEntityId) != lastTypingState;
 
-        if (teamChanged || dataChanged) {
+        if (teamChanged || dataChanged || typingChanged) {
             if (teamChanged) {
                 // Switched teams - clear selection and select first entity
                 selectedEntityId = null;
@@ -362,6 +367,7 @@ public class ChatScreen extends Screen {
 
             lastTeamRevision = team.getRevision();
             lastReadRevision = readData.getRevision();
+            lastTypingState = selectedEntityId != null && team.isTyping(selectedEntityId);
 
             List<String> entityIds = sortEntityIds(team, team.getEntityIds());
             entityList.setEntities(team, readData, entityIds);

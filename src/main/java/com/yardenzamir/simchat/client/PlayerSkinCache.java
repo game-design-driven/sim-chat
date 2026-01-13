@@ -82,8 +82,7 @@ public class PlayerSkinCache {
                     }, true);
                 });
             } catch (Exception e) {
-                // Failed to fetch - cache default skin to avoid retry spam
-                fetchedCache.put(playerUuid, DefaultPlayerSkin.getDefaultSkin(playerUuid));
+                // Failed to fetch - allow retry next time by just clearing pending
                 pending.remove(playerUuid);
             }
         }, "SimChat-SkinFetch-" + playerUuid.toString().substring(0, 8));

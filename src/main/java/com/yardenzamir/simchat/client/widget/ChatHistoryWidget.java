@@ -108,7 +108,7 @@ public class ChatHistoryWidget extends AbstractWidget {
     }
 
     private void scrollToBottom() {
-        scrollOffset = Math.max(0, contentHeight - height);
+        scrollOffset = clampScrollOffset(contentHeight);
     }
 
     private int clampScrollOffset(int offset) {
@@ -132,6 +132,9 @@ public class ChatHistoryWidget extends AbstractWidget {
 
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Clamp scroll in case dimensions changed since scroll was set
+        scrollOffset = clampScrollOffset(scrollOffset);
+
         hoverState.reset();
 
         graphics.enableScissor(getX(), getY(), getX() + width, getY() + height);

@@ -15,8 +15,7 @@ import java.util.UUID;
  */
 public final class ChatMessage {
 
-    private static final String TAG_IS_PLAYER = "isPlayer";
-    private static final String TAG_IS_SYSTEM = "isSystem";
+    private static final String TAG_TYPE = "type";
     private static final String TAG_ENTITY_ID = "entityId";
     private static final String TAG_SENDER_NAME = "senderName";
     private static final String TAG_SENDER_SUBTITLE = "senderSubtitle";
@@ -27,11 +26,8 @@ public final class ChatMessage {
     private static final String TAG_TRANSACTION_INPUT = "transactionInput";
     private static final String TAG_TRANSACTION_OUTPUT = "transactionOutput";
     private static final String TAG_PLAYER_UUID = "playerUuid";
-    // Legacy support
-    private static final String TAG_TIMESTAMP = "timestamp";
 
-    private final boolean isPlayerMessage;
-    private final boolean isSystemMessage;
+    private final MessageType type;
     private final String entityId;
     private final String senderName;
     private final @Nullable String senderSubtitle;
@@ -43,13 +39,12 @@ public final class ChatMessage {
     private final List<ChatAction.ActionItem> transactionOutput;
     private final @Nullable UUID playerUuid;
 
-    private ChatMessage(boolean isPlayerMessage, boolean isSystemMessage, String entityId, String senderName,
+    private ChatMessage(MessageType type, String entityId, String senderName,
                         @Nullable String senderSubtitle, @Nullable String senderImageId,
                         String content, long worldDay, List<ChatAction> actions,
                         List<ChatAction.ActionItem> transactionInput, List<ChatAction.ActionItem> transactionOutput,
                         @Nullable UUID playerUuid) {
-        this.isPlayerMessage = isPlayerMessage;
-        this.isSystemMessage = isSystemMessage;
+        this.type = type;
         this.entityId = entityId;
         this.senderName = senderName;
         this.senderSubtitle = senderSubtitle;
@@ -69,7 +64,7 @@ public final class ChatMessage {
      */
     public static ChatMessage fromEntity(String entityId, String displayName, @Nullable String subtitle,
                                          String imageId, String content, long worldDay, List<ChatAction> actions) {
-        return new ChatMessage(false, false, entityId, displayName, subtitle, imageId, content, worldDay, actions,
+        return new ChatMessage(MessageType.ENTITY, entityId, displayName, subtitle, imageId, content, worldDay, actions,
                 Collections.emptyList(), Collections.emptyList(), null);
     }
 
@@ -82,7 +77,7 @@ public final class ChatMessage {
      */
     public static ChatMessage fromPlayer(String entityId, UUID playerUuid, String playerName,
                                          @Nullable String teamTitle, String content, long worldDay) {
-        return new ChatMessage(true, false, entityId, playerName, teamTitle, null, content, worldDay,
+        return new ChatMessage(MessageType.PLAYER, entityId, playerName, teamTitle, null, content, worldDay,
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), playerUuid);
     }
 
@@ -92,7 +87,7 @@ public final class ChatMessage {
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
     public static ChatMessage systemMessage(String entityId, String content, long worldDay) {
-        return new ChatMessage(false, true, entityId, "", null, null, content, worldDay, Collections.emptyList(),
+        return new ChatMessage(MessageType.SYSTEM, entityId, "", null, null, content, worldDay, Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), null);
     }
 
@@ -106,16 +101,24 @@ public final class ChatMessage {
     public static ChatMessage transactionMessage(String entityId, long worldDay,
                                                   List<ChatAction.ActionItem> inputItems,
                                                   List<ChatAction.ActionItem> outputItems) {
-        return new ChatMessage(false, true, entityId, "", null, null, "", worldDay, Collections.emptyList(),
+        return new ChatMessage(MessageType.SYSTEM, entityId, "", null, null, "", worldDay, Collections.emptyList(),
                 inputItems, outputItems, null);
     }
 
+    public MessageType type() {
+        return type;
+    }
+
     public boolean isPlayerMessage() {
-        return isPlayerMessage;
+        return type == MessageType.PLAYER;
     }
 
     public boolean isSystemMessage() {
-        return isSystemMessage;
+        return type == MessageType.SYSTEM;
+    }
+
+    public boolean isEntityMessage() {
+        return type == MessageType.ENTITY;
     }
 
     public String entityId() {
@@ -176,14 +179,13 @@ public final class ChatMessage {
      * Returns a copy of this message with actions cleared.
      */
     public ChatMessage withoutActions() {
-        return new ChatMessage(isPlayerMessage, isSystemMessage, entityId, senderName, senderSubtitle, senderImageId,
+        return new ChatMessage(type, entityId, senderName, senderSubtitle, senderImageId,
                 content, worldDay, Collections.emptyList(), transactionInput, transactionOutput, playerUuid);
     }
 
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
-        tag.putBoolean(TAG_IS_PLAYER, isPlayerMessage);
-        tag.putBoolean(TAG_IS_SYSTEM, isSystemMessage);
+        tag.putInt(TAG_TYPE, type.ordinal());
         tag.putString(TAG_ENTITY_ID, entityId);
         tag.putString(TAG_SENDER_NAME, senderName);
         if (senderSubtitle != null) {
@@ -243,25 +245,17 @@ public final class ChatMessage {
             }
         }
 
-        // Support both new worldDay and legacy timestamp
-        long day;
-        if (tag.contains(TAG_WORLD_DAY)) {
-            day = tag.getLong(TAG_WORLD_DAY);
-        } else if (tag.contains(TAG_TIMESTAMP)) {
-            // Legacy: convert old timestamp to day 0 (can't recover actual day)
-            day = 0;
-        } else {
-            day = 0;
-        }
+        long day = tag.contains(TAG_WORLD_DAY) ? tag.getLong(TAG_WORLD_DAY) : 0;
 
         List<ChatAction.ActionItem> transactionInput = itemListFromNbt(tag, TAG_TRANSACTION_INPUT);
         List<ChatAction.ActionItem> transactionOutput = itemListFromNbt(tag, TAG_TRANSACTION_OUTPUT);
 
         UUID playerUuid = tag.hasUUID(TAG_PLAYER_UUID) ? tag.getUUID(TAG_PLAYER_UUID) : null;
 
+        MessageType type = MessageType.fromOrdinal(tag.getInt(TAG_TYPE));
+
         return new ChatMessage(
-                tag.getBoolean(TAG_IS_PLAYER),
-                tag.getBoolean(TAG_IS_SYSTEM),
+                type,
                 tag.getString(TAG_ENTITY_ID),
                 tag.getString(TAG_SENDER_NAME),
                 tag.contains(TAG_SENDER_SUBTITLE) ? tag.getString(TAG_SENDER_SUBTITLE) : null,

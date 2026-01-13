@@ -26,6 +26,7 @@ import java.util.List;
  * @param itemsInput   Items required from player inventory (consumed on click, blue background)
  * @param itemsOutput  Items given to player on click (orange background)
  * @param nextState    If present, dialogue resource location to send after this action (e.g., "mypack:npc/next")
+ * @param condition    If present, condition that must pass for action to be visible (e.g., "kjs:hasHighRep", "!flag:seen_intro")
  */
 public record ChatAction(
         String label,
@@ -34,7 +35,8 @@ public record ChatAction(
         List<ActionItem> itemsVisual,
         List<ActionItem> itemsInput,
         List<ActionItem> itemsOutput,
-        @Nullable String nextState
+        @Nullable String nextState,
+        @Nullable String condition
 ) {
 
     private static final String TAG_LABEL = "label";
@@ -44,6 +46,7 @@ public record ChatAction(
     private static final String TAG_ITEMS_INPUT = "itemsInput";
     private static final String TAG_ITEMS_OUTPUT = "itemsOutput";
     private static final String TAG_NEXT_STATE = "nextState";
+    private static final String TAG_CONDITION = "condition";
     private static final String TAG_ITEM = "item";
     private static final String TAG_ITEM_COUNT = "count";
 
@@ -114,6 +117,9 @@ public record ChatAction(
         if (nextState != null) {
             tag.putString(TAG_NEXT_STATE, nextState);
         }
+        if (condition != null) {
+            tag.putString(TAG_CONDITION, condition);
+        }
 
         return tag;
     }
@@ -150,12 +156,13 @@ public record ChatAction(
 
         String replyText = tag.contains(TAG_REPLY) ? tag.getString(TAG_REPLY) : null;
         String nextState = tag.contains(TAG_NEXT_STATE) ? tag.getString(TAG_NEXT_STATE) : null;
+        String condition = tag.contains(TAG_CONDITION) ? tag.getString(TAG_CONDITION) : null;
 
         List<ActionItem> itemsVisual = itemListFromNbt(tag, TAG_ITEMS_VISUAL);
         List<ActionItem> itemsInput = itemListFromNbt(tag, TAG_ITEMS_INPUT);
         List<ActionItem> itemsOutput = itemListFromNbt(tag, TAG_ITEMS_OUTPUT);
 
-        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState);
+        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState, condition);
     }
 
     /**

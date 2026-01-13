@@ -2,6 +2,9 @@ package com.yardenzamir.simchat.data;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.yardenzamir.simchat.condition.CallbackContext;
+import com.yardenzamir.simchat.condition.ConditionEvaluator;
+import com.yardenzamir.simchat.condition.TemplateEngine;
 import net.minecraft.util.GsonHelper;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,6 +27,7 @@ public record DialogueData(
      * @param itemsInput Items required from player inventory (consumed on click)
      * @param itemsOutput Items given to player on click
      * @param nextState Dialogue resource location to auto-send after this action (e.g., "mypack:npc/next")
+     * @param condition Condition that must pass for action to be visible (e.g., "kjs:hasHighRep", "!flag:seen_intro")
      */
     public record DialogueAction(
             String label,
@@ -32,7 +36,8 @@ public record DialogueData(
             List<ChatAction.ActionItem> itemsVisual,
             List<ChatAction.ActionItem> itemsInput,
             List<ChatAction.ActionItem> itemsOutput,
-            @Nullable String nextState
+            @Nullable String nextState,
+            @Nullable String condition
     ) {
         private static List<ChatAction.ActionItem> parseItemArray(JsonObject json, String key) {
             List<ChatAction.ActionItem> items = new ArrayList<>();
@@ -62,8 +67,9 @@ public record DialogueData(
             List<ChatAction.ActionItem> itemsInput = parseItemArray(json, "itemsInput");
             List<ChatAction.ActionItem> itemsOutput = parseItemArray(json, "itemsOutput");
             String nextState = GsonHelper.getAsString(json, "nextState", null);
+            String condition = GsonHelper.getAsString(json, "condition", null);
 
-            return new DialogueAction(label, commands, reply, itemsVisual, itemsInput, itemsOutput, nextState);
+            return new DialogueAction(label, commands, reply, itemsVisual, itemsInput, itemsOutput, nextState, condition);
         }
     }
 
@@ -85,11 +91,20 @@ public record DialogueData(
     }
 
     /**
-     * Converts this dialogue to a ChatMessage.
-     * Uses the entityId from dialogue data, or falls back to the provided one.
-     * Entity name, subtitle, and avatar fall back to EntityConfigManager values.
+     * Converts this dialogue to a ChatMessage without condition filtering or template processing.
      */
     public ChatMessage toMessage(String fallbackEntityId, long worldDay) {
+        return toMessage(fallbackEntityId, worldDay, null);
+    }
+
+    /**
+     * Converts this dialogue to a ChatMessage with condition filtering and template processing.
+     * Uses the entityId from dialogue data, or falls back to the provided one.
+     * Entity name, subtitle, and avatar fall back to EntityConfigManager values.
+     *
+     * @param ctx If provided, filters actions by condition and processes templates in labels/text
+     */
+    public ChatMessage toMessage(String fallbackEntityId, long worldDay, @Nullable CallbackContext ctx) {
         String resolvedEntityId = this.entityId != null ? this.entityId : fallbackEntityId;
 
         // Apply entity config fallbacks
@@ -97,11 +112,24 @@ public record DialogueData(
         String resolvedSubtitle = EntityConfigManager.getSubtitle(resolvedEntityId, entitySubtitle);
         String resolvedAvatar = EntityConfigManager.getAvatar(resolvedEntityId, null);
 
+        // Process message text with templates if context provided
+        String processedText = ctx != null ? TemplateEngine.process(text, ctx) : text;
+
         List<ChatAction> chatActions = new ArrayList<>();
         for (DialogueAction action : actions) {
-            chatActions.add(new ChatAction(action.label(), action.commands(), action.reply(),
-                    action.itemsVisual(), action.itemsInput(), action.itemsOutput(), action.nextState()));
+            // Skip action if condition fails
+            if (ctx != null && action.condition() != null) {
+                if (!ConditionEvaluator.evaluate(action.condition(), ctx)) {
+                    continue;
+                }
+            }
+
+            // Process label with templates if context provided
+            String processedLabel = ctx != null ? TemplateEngine.process(action.label(), ctx) : action.label();
+
+            chatActions.add(new ChatAction(processedLabel, action.commands(), action.reply(),
+                    action.itemsVisual(), action.itemsInput(), action.itemsOutput(), action.nextState(), action.condition()));
         }
-        return ChatMessage.fromEntity(resolvedEntityId, resolvedName, resolvedSubtitle, resolvedAvatar, text, worldDay, chatActions);
+        return ChatMessage.fromEntity(resolvedEntityId, resolvedName, resolvedSubtitle, resolvedAvatar, processedText, worldDay, chatActions);
     }
 }

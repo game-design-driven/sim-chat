@@ -2,6 +2,7 @@ package com.yardenzamir.simchat.network;
 
 import com.yardenzamir.simchat.SimChatMod;
 import com.yardenzamir.simchat.command.DelayedMessageScheduler;
+import com.yardenzamir.simchat.condition.CallbackContext;
 import com.yardenzamir.simchat.config.ServerConfig;
 import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
@@ -167,7 +168,8 @@ public class ActionClickPacket {
                 if (nextStateId != null) {
                     DialogueData nextDialogue = DialogueManager.get(nextStateId);
                     if (nextDialogue != null) {
-                        ChatMessage nextMessage = nextDialogue.toMessage(nextDialogue.entityId(), worldDay);
+                        CallbackContext callbackCtx = new CallbackContext(player, team, nextDialogue.entityId());
+                        ChatMessage nextMessage = nextDialogue.toMessage(nextDialogue.entityId(), worldDay, callbackCtx);
                         int delayTicks = calculateDelayTicks(nextDialogue.text());
                         DelayedMessageScheduler.schedule(player, nextMessage, delayTicks);
                     } else {

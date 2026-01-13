@@ -1,0 +1,1 @@
+com.yardenzamir.simchat.integration.kubejs.SimChatKubeJSPlugin simchat

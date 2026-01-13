@@ -54,6 +54,11 @@
             "description": "Dialogue resource location to auto-send after this action (e.g., 'mypack:npc/next'). Triggers typing delay then delivers the next dialogue automatically.",
             "pattern": "^[a-z0-9_.-]+:[a-z0-9_./]+$"
           },
+          "condition": {
+            "type": "string",
+            "description": "Condition that must pass for this action to be visible. Supports prefixes: 'kjs:callbackName' (KubeJS callback), 'flag:flagName' (team flag), 'score:objectiveName' (scoreboard > 0), 'permission:level' (op level). Prefix with '!' to negate.",
+            "examples": ["kjs:hasHighRep", "!flag:seen_intro", "score:playerKills", "permission:2"]
+          },
           "itemsVisual": {
             "type": "array",
             "description": "Items displayed on the button (visual only, gray background)",

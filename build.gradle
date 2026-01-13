@@ -16,10 +16,23 @@ java {
 repositories {
     mavenLocal()
     mavenCentral()
+    maven {
+        url 'https://maven.latvian.dev/releases'
+        content {
+            includeGroup 'dev.latvian.mods'
+            includeGroup 'dev.latvian.apps'
+        }
+    }
+    maven {
+        url 'https://maven.architectury.dev/'
+        content { includeGroup 'dev.architectury' }
+    }
 }
 
 dependencies {
     compileOnly 'org.jetbrains:annotations:24.1.0'
+    // KubeJS - soft dependency for scripting integration
+    compileOnly 'dev.latvian.mods:kubejs-forge:2001.6.5-build.16'
 }
 
 legacyForge {

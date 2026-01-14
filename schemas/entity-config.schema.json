@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YardenZamir/sim-chat/schemas/entity-config.schema.json",
   "title": "SimChat Entity Config",
-  "description": "Schema for SimChat entity configuration files in config/simchat/entities/<entityId>.json",
+  "description": "Schema for SimChat entity configuration files in config/simchat/entities/<entityId>.json. Place both .json configs and .png images in the entities folder. Falls back to default.json and default.png if entity-specific files not found.",
   "type": "object",
   "properties": {
     "name": {
@@ -15,7 +15,7 @@
     },
     "avatar": {
       "type": "string",
-      "description": "Avatar ID to use (defaults to entityId). Loads from config/simchat/avatars/<avatar>.png"
+      "description": "Avatar ID to use (defaults to entityId). Loads from config/simchat/entities/<avatar>.png. Falls back to default.png."
     }
   },
   "examples": [
@@ -23,6 +23,11 @@
       "name": "Director Vex",
       "subtitle": "Helion Industries",
       "avatar": "contractor"
+    },
+    {
+      "$comment": "default.json - fallback config for all entities without specific configs",
+      "name": "Unknown",
+      "subtitle": "Stranger"
     }
   ]
 }

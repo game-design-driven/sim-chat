@@ -2,6 +2,7 @@ package com.yardenzamir.simchat.client.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.yardenzamir.simchat.client.AvatarManager;
+import com.yardenzamir.simchat.client.ClientTemplateEngine;
 import com.yardenzamir.simchat.client.PlayerSkinCache;
 import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatAction;
@@ -69,8 +70,10 @@ public final class MessageRenderer {
         int nextX = textX + mc.font.width(message.senderName());
 
         // Show subtitle (entity subtitle or team title for player messages)
-        if (message.senderSubtitle() != null) {
-            String subtitle = " - " + message.senderSubtitle();
+        // Process templates like {team:title} at render time
+        String resolvedSubtitle = ClientTemplateEngine.process(message.senderSubtitle());
+        if (resolvedSubtitle != null && !resolvedSubtitle.isEmpty()) {
+            String subtitle = " - " + resolvedSubtitle;
             graphics.drawString(mc.font, subtitle, nextX, textY, SUBTITLE_COLOR);
             nextX += mc.font.width(subtitle);
         }

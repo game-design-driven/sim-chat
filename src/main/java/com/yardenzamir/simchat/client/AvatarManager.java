@@ -16,41 +16,49 @@ import java.util.Map;
 
 /**
  * Manages loading and caching avatar images from the config folder.
- * Images are loaded from: config/simchat/avatars/<imageId>.png
+ * Images are loaded from: config/simchat/entities/<imageId>.png
+ * Falls back to default.png if entity-specific image not found.
  * Automatically reloads when files are added or modified.
  */
 public class AvatarManager {
 
     private static final Map<String, CachedTexture> TEXTURE_CACHE = new HashMap<>();
     private static final ResourceLocation FALLBACK_TEXTURE = new ResourceLocation("textures/misc/unknown_server.png");
+    private static final String DEFAULT_IMAGE_ID = "default";
 
-    private static Path avatarsFolder;
+    private static Path entitiesFolder;
 
     private record CachedTexture(ResourceLocation location, long modTime, boolean isFallback) {}
 
     public static void init() {
-        avatarsFolder = FMLPaths.CONFIGDIR.get().resolve("simchat").resolve("avatars");
+        entitiesFolder = FMLPaths.CONFIGDIR.get().resolve("simchat").resolve("entities");
         try {
-            Files.createDirectories(avatarsFolder);
+            Files.createDirectories(entitiesFolder);
         } catch (IOException e) {
-            SimChatMod.LOGGER.error("Failed to create avatars folder", e);
+            SimChatMod.LOGGER.error("Failed to create entities folder", e);
         }
     }
 
     /**
      * Gets the texture ResourceLocation for an avatar image.
      * Automatically reloads if the file has been added or modified.
+     * Falls back to default.png if entity-specific image not found.
      *
      * @param imageId The image ID (filename without extension)
      * @return ResourceLocation for the texture, or fallback if not found
      */
     public static ResourceLocation getTexture(String imageId) {
         if (imageId == null || imageId.isEmpty()) {
-            return FALLBACK_TEXTURE;
+            imageId = DEFAULT_IMAGE_ID;
         }
 
-        Path imagePath = avatarsFolder.resolve(imageId + ".png");
+        Path imagePath = entitiesFolder.resolve(imageId + ".png");
         long currentModTime = getModTime(imagePath);
+
+        // If entity-specific image doesn't exist, try default.png
+        if (currentModTime == 0 && !DEFAULT_IMAGE_ID.equals(imageId)) {
+            return getTexture(DEFAULT_IMAGE_ID);
+        }
 
         CachedTexture cached = TEXTURE_CACHE.get(imageId);
 
@@ -115,9 +123,9 @@ public class AvatarManager {
     }
 
     /**
-     * Gets the path to the avatars folder for users to add images.
+     * Gets the path to the entities folder for users to add images and configs.
      */
-    public static Path getAvatarsFolder() {
-        return avatarsFolder;
+    public static Path getEntitiesFolder() {
+        return entitiesFolder;
     }
 }

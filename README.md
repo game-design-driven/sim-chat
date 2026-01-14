@@ -267,18 +267,13 @@ ctx.entity.isTyping
 }
 ```
 
-## Custom Avatars
+## Entity Files
 
-Place PNG images in: `config/simchat/avatars/`
+Place entity configs and avatars in: `config/simchat/entities/`
 
-Filename (without extension) becomes the avatar ID:
-- `config/simchat/avatars/merchant.png` → entity with `entityId: "merchant"` uses this avatar
-
-Images hot-reload when modified. Any size works, displayed at 36x36.
-
-## Entity Config Files
-
-Define default entity info in: `config/simchat/entities/<entityId>.json`
+Each entity can have:
+- `<entityId>.json` - Config with name, subtitle, avatar settings
+- `<entityId>.png` - Avatar image (any size, displayed at 36x36)
 
 Example: `config/simchat/entities/merchant.json`
 
@@ -296,7 +291,11 @@ Example: `config/simchat/entities/merchant.json`
 | `subtitle` | Default subtitle |
 | `avatar` | Avatar ID (defaults to entityId) |
 
-Entity configs hot-reload when modified.
+### Defaults
+
+Create `default.json` and/or `default.png` as fallbacks for entities without specific files.
+
+All entity files hot-reload when modified.
 
 ## Configuration
 

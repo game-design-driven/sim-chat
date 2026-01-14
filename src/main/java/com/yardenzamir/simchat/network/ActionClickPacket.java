@@ -188,7 +188,7 @@ public class ActionClickPacket {
                         packet.entityId,
                         player.getUUID(),
                         player.getName().getString(),
-                        team.getTitle(),
+                        null, // Use default template {team:title}, resolved at render time
                         processedReply,
                         worldDay
                 );

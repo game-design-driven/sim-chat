@@ -16,12 +16,14 @@ import java.util.Map;
 
 /**
  * Loads entity configuration from config/simchat/entities/<entityId>.json files.
+ * Falls back to default.json if entity-specific config not found.
  * Provides fallback values for entity name, subtitle, and avatar when not specified in dialogues.
  */
 public class EntityConfigManager {
 
     private static final Gson GSON = new GsonBuilder().create();
     private static final Path ENTITIES_DIR = FMLPaths.CONFIGDIR.get().resolve("simchat").resolve("entities");
+    private static final String DEFAULT_ENTITY_ID = "default";
 
     private static final Map<String, EntityConfig> cache = new HashMap<>();
     private static final Map<String, Long> lastModified = new HashMap<>();
@@ -44,12 +46,13 @@ public class EntityConfigManager {
 
     /**
      * Gets entity configuration for the given entity ID.
+     * Falls back to default.json if entity-specific config not found.
      * Automatically reloads if file was modified.
      */
     @Nullable
     public static EntityConfig getConfig(String entityId) {
         if (entityId == null || entityId.isEmpty()) {
-            return null;
+            entityId = DEFAULT_ENTITY_ID;
         }
 
         Path configFile = ENTITIES_DIR.resolve(entityId + ".json");
@@ -57,6 +60,10 @@ public class EntityConfigManager {
         if (!Files.exists(configFile)) {
             cache.remove(entityId);
             lastModified.remove(entityId);
+            // Fall back to default.json if entity-specific config not found
+            if (!DEFAULT_ENTITY_ID.equals(entityId)) {
+                return getConfig(DEFAULT_ENTITY_ID);
+            }
             return null;
         }
 

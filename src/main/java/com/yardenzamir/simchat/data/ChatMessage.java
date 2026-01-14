@@ -27,6 +27,12 @@ public final class ChatMessage {
     private static final String TAG_TRANSACTION_OUTPUT = "transactionOutput";
     private static final String TAG_PLAYER_UUID = "playerUuid";
 
+    /**
+     * Default subtitle template for player messages.
+     * Resolved at render time via ClientTemplateEngine.
+     */
+    public static final String DEFAULT_PLAYER_SUBTITLE = "{team:title}";
+
     private final MessageType type;
     private final String entityId;
     private final String senderName;
@@ -72,12 +78,13 @@ public final class ChatMessage {
      * Creates a player reply message.
      *
      * @param playerUuid Player's UUID for skin lookup
-     * @param teamTitle Team name shown as subtitle
+     * @param subtitleTemplate Subtitle template (use null for default {team:title})
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
     public static ChatMessage fromPlayer(String entityId, UUID playerUuid, String playerName,
-                                         @Nullable String teamTitle, String content, long worldDay) {
-        return new ChatMessage(MessageType.PLAYER, entityId, playerName, teamTitle, null, content, worldDay,
+                                         @Nullable String subtitleTemplate, String content, long worldDay) {
+        String subtitle = subtitleTemplate != null ? subtitleTemplate : DEFAULT_PLAYER_SUBTITLE;
+        return new ChatMessage(MessageType.PLAYER, entityId, playerName, subtitle, null, content, worldDay,
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), playerUuid);
     }
 

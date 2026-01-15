@@ -37,10 +37,10 @@ A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogu
 /simchat team list                     - List all teams
 /simchat team info                     - Show current team info
 /simchat team title <newTitle>         - Change team name
-/simchat team color <color>            - Change team color (name or 0-15)
+/simchat team color <color>            - Change team color (name only)
 ```
 
-Available colors: `black` (0), `dark_blue` (1), `dark_green` (2), `dark_aqua` (3), `dark_red` (4), `dark_purple` (5), `gold` (6), `gray` (7), `dark_gray` (8), `blue` (9), `green` (10), `aqua` (11), `red` (12), `light_purple` (13), `yellow` (14), `white` (15)
+Available colors: `black`, `dark_blue`, `dark_green`, `dark_aqua`, `dark_red`, `dark_purple`, `gold`, `gray`, `dark_gray`, `blue`, `green`, `aqua`, `red`, `light_purple`, `yellow`, `white`
 
 ### Data Commands
 
@@ -136,6 +136,10 @@ Example: `data/mypack/simchat/contractor/greeting.json`
 
 ## Templates
 
+Templates work in `entityName`, `entitySubtitle`, `text`, `label`, `reply`, and `commands`.
+
+Prefix with `{compile:...}` (default) to resolve on the server when the message is created, or `{runtime:...}` to resolve on the client when the message is displayed. Runtime templates are stored and resolved client-side; the server only sees the compiled text. Runtime values refresh when the chat opens, when new messages arrive, or via the Refresh button.
+
 Use `{resolver:name}` syntax in text, labels, and replies:
 
 | Template | Description | Example |
@@ -145,7 +149,7 @@ Use `{resolver:name}` syntax in text, labels, and replies:
 | `{team:id}` | Team ID | "a1b2c3d" |
 | `{team:title}` | Team name | "The Builders" |
 | `{team:memberCount}` | Number of team members | "3" |
-| `{team:color}` | Team color index (0-15) | "12" |
+| `{team:color}` | Team color name | "dark_blue" |
 | `{data:keyname}` | Team data value | "42" |
 | `{world:day}` | Current world day | "15" |
 | `{world:time}` | Time of day (0-24000) | "6000" |

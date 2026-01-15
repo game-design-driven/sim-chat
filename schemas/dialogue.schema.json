@@ -13,16 +13,16 @@
     },
     "entityName": {
       "type": "string",
-      "description": "Display name shown in chat and sidebar",
+      "description": "Display name shown in chat and sidebar. Supports templates with {compile:...} or {runtime:...}.",
       "minLength": 1
     },
     "entitySubtitle": {
       "type": "string",
-      "description": "Optional subtitle shown next to name (e.g., company, title, affiliation)"
+      "description": "Optional subtitle shown next to name (e.g., company, title, affiliation). Supports templates with {compile:...} or {runtime:...}."
     },
     "text": {
       "type": "string",
-      "description": "Message content displayed in the chat",
+      "description": "Message content displayed in the chat. Supports templates with {compile:...} or {runtime:...}.",
       "minLength": 1
     },
     "actions": {
@@ -34,12 +34,12 @@
         "properties": {
           "label": {
             "type": "string",
-            "description": "Button text",
+            "description": "Button text. Supports templates with {compile:...} or {runtime:...}.",
             "minLength": 1
           },
           "commands": {
             "type": "array",
-            "description": "Commands to execute when clicked (in order)",
+            "description": "Commands to execute when clicked (in order). Supports templates with {compile:...} or {runtime:...}.",
             "items": {
               "type": "string"
             },
@@ -47,7 +47,7 @@
           },
           "reply": {
             "type": "string",
-            "description": "Player's reply text shown in chat when button is clicked"
+            "description": "Player's reply text shown in chat when button is clicked. Supports templates with {compile:...} or {runtime:...}."
           },
           "nextState": {
             "type": "string",

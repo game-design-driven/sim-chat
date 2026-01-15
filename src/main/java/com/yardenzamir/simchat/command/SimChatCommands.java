@@ -1,26 +1,8 @@
 package com.yardenzamir.simchat.command;
 
-import com.yardenzamir.simchat.SimChatMod;
-import com.yardenzamir.simchat.capability.ChatCapability;
-import com.yardenzamir.simchat.condition.CallbackContext;
-import com.yardenzamir.simchat.config.ServerConfig;
-import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.data.DialogueData;
-import com.yardenzamir.simchat.data.DialogueManager;
-import com.yardenzamir.simchat.data.PlayerChatData;
-import com.yardenzamir.simchat.network.NetworkHandler;
-import com.yardenzamir.simchat.integration.kubejs.KubeJSIntegration;
-import com.yardenzamir.simchat.team.SimChatTeamManager;
-import com.yardenzamir.simchat.team.TeamData;
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.DoubleArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.suggestion.Suggestions;
-import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import net.minecraft.commands.CommandSourceStack;
 import java.util.concurrent.CompletableFuture;
+
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -34,6 +16,28 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+
+import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.condition.CallbackContext;
+import com.yardenzamir.simchat.condition.TemplateEngine;
+import com.yardenzamir.simchat.config.ServerConfig;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.data.DialogueData;
+import com.yardenzamir.simchat.data.DialogueManager;
+import com.yardenzamir.simchat.data.PlayerChatData;
+import com.yardenzamir.simchat.integration.kubejs.KubeJSIntegration;
+import com.yardenzamir.simchat.network.NetworkHandler;
+import com.yardenzamir.simchat.team.SimChatTeamManager;
+import com.yardenzamir.simchat.team.TeamData;
 
 /**
  * Registers and handles all /simchat commands.
@@ -193,9 +197,9 @@ public class SimChatCommands {
         SimChatTeamManager manager = SimChatTeamManager.get(player.server);
         TeamData team = manager.getPlayerTeam(player);
         CallbackContext callbackCtx = new CallbackContext(player, team, dialogue.entityId());
-        ChatMessage message = dialogue.toMessage(dialogue.entityId(), worldDay, callbackCtx);
+        ChatMessage message = dialogue.toMessage(dialogue.entityId(), worldDay, callbackCtx, dialogueId);
 
-        float delay = calculateDelay(dialogue.text());
+        float delay = calculateDelay(message.content());
         int delayTicks = (int) (delay * 20);
         DelayedMessageScheduler.schedule(player, message, delayTicks);
 
@@ -216,7 +220,9 @@ public class SimChatCommands {
         }
 
         long worldDay = getWorldDay(player);
-        ChatMessage message = ChatMessage.systemMessage(entityId, messageText, worldDay);
+        CallbackContext callbackCtx = new CallbackContext(player, team, entityId);
+        TemplateEngine.TemplateCompilation compilation = TemplateEngine.compile(messageText, callbackCtx);
+        ChatMessage message = ChatMessage.systemMessage(entityId, compilation.compiledText(), compilation.runtimeTemplate(), worldDay);
         team.addMessage(message);
         manager.saveTeam(team);
         NetworkHandler.syncTeamToAllMembers(team, player.server);
@@ -441,7 +447,9 @@ public class SimChatCommands {
         ctx.getSource().sendSuccess(() -> membersLabel.copy().append(membersVal), false);
 
         Component colorLabel = Component.literal("  Color: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
-        Component colorVal = Component.literal(COLOR_NAMES[team.getColor()]).withStyle(Style.EMPTY.withColor(0xFFAA00));
+        int colorIndex = Math.max(0, Math.min(15, team.getColor()));
+        Component colorVal = Component.literal(TeamData.getColorName(colorIndex))
+                .withStyle(Style.EMPTY.withColor(SOFT_COLOR_VALUES[colorIndex]));
         ctx.getSource().sendSuccess(() -> colorLabel.copy().append(colorVal), false);
 
         Component convsLabel = Component.literal("  Conversations: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
@@ -497,34 +505,36 @@ public class SimChatCommands {
         return 1;
     }
 
-    private static final String[] COLOR_NAMES = {
-            "black", "dark_blue", "dark_green", "dark_aqua",
-            "dark_red", "dark_purple", "gold", "gray",
-            "dark_gray", "blue", "green", "aqua",
-            "red", "light_purple", "yellow", "white"
+    private static final int[] SOFT_COLOR_VALUES = {
+            0xFF2B2B2B, // black
+            0xFF3B4D8F, // dark_blue
+            0xFF3E7A5A, // dark_green
+            0xFF3A6E7A, // dark_aqua
+            0xFF8A4A4A, // dark_red
+            0xFF7A4A8A, // dark_purple
+            0xFFB48A55, // gold
+            0xFF9A9A9A, // gray
+            0xFF5A5A5A, // dark_gray
+            0xFF6B7DD9, // blue
+            0xFF7BCB8B, // green
+            0xFF7BCACD, // aqua
+            0xFFE07A7A, // red
+            0xFFC590E0, // light_purple
+            0xFFE6D37A, // yellow
+            0xFFF2F2F2  // white
     };
 
     private static CompletableFuture<Suggestions> suggestColors(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
-        for (String color : COLOR_NAMES) {
+        for (String color : TeamData.COLOR_NAMES) {
             builder.suggest(color);
-        }
-        for (int i = 0; i <= 15; i++) {
-            builder.suggest(String.valueOf(i));
         }
         return builder.buildFuture();
     }
 
     private static int parseColor(String input) {
-        // Try as number
-        try {
-            int num = Integer.parseInt(input);
-            return Math.max(0, Math.min(15, num));
-        } catch (NumberFormatException ignored) {}
-
-        // Try as color name
-        String lower = input.toLowerCase();
-        for (int i = 0; i < COLOR_NAMES.length; i++) {
-            if (COLOR_NAMES[i].equals(lower)) {
+        String normalized = input.toLowerCase().replace('-', '_');
+        for (int i = 0; i < TeamData.COLOR_NAMES.length; i++) {
+            if (TeamData.COLOR_NAMES[i].equals(normalized)) {
                 return i;
             }
         }
@@ -553,8 +563,10 @@ public class SimChatCommands {
         manager.updateVanillaTeamColor(team);
         NetworkHandler.syncTeamToAllMembers(team, player.server);
 
-        String colorName = COLOR_NAMES[colorIndex];
-        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.color_changed", colorName), false);
+        String colorName = TeamData.getColorName(colorIndex);
+        Component coloredName = Component.literal(colorName)
+                .withStyle(Style.EMPTY.withColor(SOFT_COLOR_VALUES[colorIndex]));
+        ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.color_changed", coloredName), false);
         return 1;
     }
 

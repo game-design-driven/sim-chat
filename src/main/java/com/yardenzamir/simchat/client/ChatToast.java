@@ -1,13 +1,15 @@
 package com.yardenzamir.simchat.client;
 
-import com.yardenzamir.simchat.config.ClientConfig;
-import com.yardenzamir.simchat.data.ChatMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.components.toasts.ToastComponent;
 import net.minecraft.resources.ResourceLocation;
+
+import com.yardenzamir.simchat.config.ClientConfig;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
 
 /**
  * Toast notification for new chat messages.
@@ -29,8 +31,9 @@ public class ChatToast implements Toast {
     private long firstRender = -1;
 
     public ChatToast(ChatMessage message, String keybindName, boolean showKeybindHint) {
-        this.senderName = message.senderName();
-        this.messagePreview = truncateMessage(message.content(), 100);
+        RuntimeTemplateResolver.preloadMessage(message);
+        this.senderName = RuntimeTemplateResolver.resolveSenderName(message);
+        this.messagePreview = truncateMessage(RuntimeTemplateResolver.resolveContent(message), 100);
         this.iconTexture = AvatarManager.getTexture(message.senderImageId());
         this.keybindHint = "[" + keybindName + "]";
         this.showKeybindHint = showKeybindHint;

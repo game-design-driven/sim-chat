@@ -4,6 +4,7 @@
 
   "simchat.screen.no_messages": "No messages yet",
   "simchat.screen.select_conversation": "Select a conversation",
+  "simchat.screen.refresh": "Refresh",
 
   "simchat.chat.typing": "typing",
   "simchat.chat.day": "Day %s",

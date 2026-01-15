@@ -1,5 +1,17 @@
 package com.yardenzamir.simchat.network;
 
+import java.util.List;
+import java.util.function.Supplier;
+
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.network.NetworkEvent;
+
+import org.jetbrains.annotations.Nullable;
+
 import com.yardenzamir.simchat.SimChatMod;
 import com.yardenzamir.simchat.command.DelayedMessageScheduler;
 import com.yardenzamir.simchat.condition.CallbackContext;
@@ -11,16 +23,6 @@ import com.yardenzamir.simchat.data.DialogueData;
 import com.yardenzamir.simchat.data.DialogueManager;
 import com.yardenzamir.simchat.team.SimChatTeamManager;
 import com.yardenzamir.simchat.team.TeamData;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.network.NetworkEvent;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * Sent from client to server when player clicks an action button.
@@ -29,24 +31,24 @@ public class ActionClickPacket {
 
     private final String entityId;
     private final int messageIndex;
-    private final String actionLabel;
+    private final int actionIndex;
     private final @Nullable String inputValue;
 
-    public ActionClickPacket(String entityId, int messageIndex, String actionLabel) {
-        this(entityId, messageIndex, actionLabel, null);
+    public ActionClickPacket(String entityId, int messageIndex, int actionIndex) {
+        this(entityId, messageIndex, actionIndex, null);
     }
 
-    public ActionClickPacket(String entityId, int messageIndex, String actionLabel, @Nullable String inputValue) {
+    public ActionClickPacket(String entityId, int messageIndex, int actionIndex, @Nullable String inputValue) {
         this.entityId = entityId;
         this.messageIndex = messageIndex;
-        this.actionLabel = actionLabel;
+        this.actionIndex = actionIndex;
         this.inputValue = inputValue;
     }
 
     public static void encode(ActionClickPacket packet, FriendlyByteBuf buf) {
         buf.writeUtf(packet.entityId);
         buf.writeVarInt(packet.messageIndex);
-        buf.writeUtf(packet.actionLabel);
+        buf.writeVarInt(packet.actionIndex);
         buf.writeBoolean(packet.inputValue != null);
         if (packet.inputValue != null) {
             buf.writeUtf(packet.inputValue);
@@ -56,9 +58,9 @@ public class ActionClickPacket {
     public static ActionClickPacket decode(FriendlyByteBuf buf) {
         String entityId = buf.readUtf();
         int messageIndex = buf.readVarInt();
-        String actionLabel = buf.readUtf();
+        int actionIndex = buf.readVarInt();
         String inputValue = buf.readBoolean() ? buf.readUtf() : null;
-        return new ActionClickPacket(entityId, messageIndex, actionLabel, inputValue);
+        return new ActionClickPacket(entityId, messageIndex, actionIndex, inputValue);
     }
 
     public static void handle(ActionClickPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -81,18 +83,10 @@ public class ActionClickPacket {
             }
 
             ChatMessage message = messages.get(packet.messageIndex);
-            ChatAction action = null;
-            for (ChatAction a : message.actions()) {
-                if (a.label().equals(packet.actionLabel)) {
-                    action = a;
-                    break;
-                }
-            }
-
-            if (action == null) {
-                // Action may have been consumed by teammate - fail silently
+            if (packet.actionIndex < 0 || packet.actionIndex >= message.actions().size()) {
                 return;
             }
+            ChatAction action = message.actions().get(packet.actionIndex);
 
             // Validate and process player input if this is an input action
             CallbackContext callbackCtx = new CallbackContext(player, team, packet.entityId);
@@ -102,21 +96,21 @@ public class ActionClickPacket {
                 // Reject if no input provided or empty
                 if (packet.inputValue == null || packet.inputValue.isEmpty()) {
                     SimChatMod.LOGGER.warn("Player {} submitted empty input for action '{}'",
-                            player.getName().getString(), packet.actionLabel);
+                            player.getName().getString(), action.label());
                     return;
                 }
 
                 // Reject if exceeds max length
                 if (packet.inputValue.length() > inputConfig.maxLength()) {
                     SimChatMod.LOGGER.warn("Player {} input exceeds max length ({} > {}) for action '{}'",
-                            player.getName().getString(), packet.inputValue.length(), inputConfig.maxLength(), packet.actionLabel);
+                            player.getName().getString(), packet.inputValue.length(), inputConfig.maxLength(), action.label());
                     return;
                 }
 
                 // Reject if pattern doesn't match
                 if (inputConfig.pattern() != null && !packet.inputValue.matches(inputConfig.pattern())) {
                     SimChatMod.LOGGER.warn("Player {} input doesn't match pattern for action '{}'",
-                            player.getName().getString(), packet.actionLabel);
+                            player.getName().getString(), action.label());
                     return;
                 }
 
@@ -145,7 +139,7 @@ public class ActionClickPacket {
                     }
                     if (found < required.getCount()) {
                         SimChatMod.LOGGER.warn("Player {} missing required item {} x{} for action '{}'",
-                                player.getName().getString(), inputItem.item(), inputItem.count(), packet.actionLabel);
+                                player.getName().getString(), inputItem.item(), inputItem.count(), action.label());
                         return;
                     }
                 }
@@ -183,13 +177,15 @@ public class ActionClickPacket {
             // Add player reply if specified (with template processing for input values)
             long worldDay = player.level().getDayTime() / 24000L;
             if (action.replyText() != null && !action.replyText().isEmpty()) {
-                String processedReply = TemplateEngine.process(action.replyText(), callbackCtx);
+                TemplateEngine.TemplateCompilation replyCompilation = TemplateEngine.compile(action.replyText(), callbackCtx);
+                String processedReply = replyCompilation.compiledText();
                 ChatMessage reply = ChatMessage.fromPlayer(
                         packet.entityId,
                         player.getUUID(),
                         player.getName().getString(),
                         null, // Use default template {team:title}, resolved at render time
                         processedReply,
+                        replyCompilation.runtimeTemplate(),
                         worldDay
                 );
                 team.addMessage(reply);
@@ -217,8 +213,8 @@ public class ActionClickPacket {
                     DialogueData nextDialogue = DialogueManager.get(nextStateId);
                     if (nextDialogue != null) {
                         CallbackContext nextCtx = new CallbackContext(player, team, nextDialogue.entityId());
-                        ChatMessage nextMessage = nextDialogue.toMessage(nextDialogue.entityId(), worldDay, nextCtx);
-                        int delayTicks = calculateDelayTicks(nextDialogue.text());
+                        ChatMessage nextMessage = nextDialogue.toMessage(nextDialogue.entityId(), worldDay, nextCtx, nextStateId);
+                        int delayTicks = calculateDelayTicks(nextMessage.content());
                         DelayedMessageScheduler.schedule(player, nextMessage, delayTicks);
                     } else {
                         SimChatMod.LOGGER.warn("nextState dialogue not found: {}", action.nextState());
@@ -231,7 +227,7 @@ public class ActionClickPacket {
             // Execute commands (with template processing for input values)
             for (String command : action.commands()) {
                 if (!command.isEmpty()) {
-                    String cmd = TemplateEngine.process(command, callbackCtx);
+                    String cmd = TemplateEngine.resolveWithPrefixes(command, callbackCtx);
                     if (cmd.startsWith("/")) {
                         cmd = cmd.substring(1);
                     }

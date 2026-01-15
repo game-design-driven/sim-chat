@@ -1,21 +1,25 @@
 package com.yardenzamir.simchat.client.widget;
 
-import com.yardenzamir.simchat.data.ChatAction;
-import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.network.ActionClickPacket;
-import com.yardenzamir.simchat.network.NetworkHandler;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
+import com.yardenzamir.simchat.client.ClientTemplateEngine;
+import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
+import com.yardenzamir.simchat.data.ChatAction;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.network.ActionClickPacket;
+import com.yardenzamir.simchat.network.NetworkHandler;
 
 import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
 
@@ -29,7 +33,7 @@ public class ChatHistoryWidget extends AbstractWidget {
     private final HoverState hoverState = new HoverState();
 
     private @Nullable String entityId;
-    private @Nullable String typingEntityName;
+    private @Nullable String typingEntityNameResolved;
     private @Nullable String typingEntityImageId;
     private boolean isTyping = false;
 
@@ -45,7 +49,7 @@ public class ChatHistoryWidget extends AbstractWidget {
      */
     private record ActiveInputState(
             int messageIndex,
-            String actionLabel,
+            int actionIndex,
             StringBuilder text,
             ChatAction.PlayerInputConfig config,
             @Nullable Pattern compiledPattern
@@ -56,7 +60,7 @@ public class ChatHistoryWidget extends AbstractWidget {
             return compiledPattern.matcher(text).matches();
         }
 
-        static ActiveInputState create(int messageIndex, String actionLabel, ChatAction.PlayerInputConfig config) {
+        static ActiveInputState create(int messageIndex, int actionIndex, ChatAction.PlayerInputConfig config) {
             Pattern pattern = null;
             if (config.pattern() != null) {
                 try {
@@ -65,7 +69,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                     // Invalid pattern - will always fail validation
                 }
             }
-            return new ActiveInputState(messageIndex, actionLabel, new StringBuilder(), config, pattern);
+            return new ActiveInputState(messageIndex, actionIndex, new StringBuilder(), config, pattern);
         }
     }
 
@@ -82,6 +86,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.messages.clear();
         this.messages.addAll(messages);
         this.entityId = entityId;
+        RuntimeTemplateResolver.preloadMessages(this.messages);
         recalculateContentHeight();
 
         if (readCount < messages.size()) {
@@ -98,6 +103,11 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.messages.clear();
         this.messages.addAll(messages);
         this.entityId = entityId;
+        if (RuntimeTemplateResolver.needsPreload()) {
+            RuntimeTemplateResolver.preloadMessages(this.messages);
+        } else if (this.messages.size() > oldCount) {
+            RuntimeTemplateResolver.preloadMessages(this.messages.subList(oldCount, this.messages.size()));
+        }
         recalculateContentHeight();
 
         if (messages.size() > oldCount) {
@@ -111,23 +121,34 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.messages.clear();
         this.entityId = null;
         this.isTyping = false;
-        this.typingEntityName = null;
+        this.typingEntityNameResolved = null;
         this.typingEntityImageId = null;
         this.scrollOffset = 0;
         this.contentHeight = 0;
         this.activeInput = null;
     }
 
-    public void setTyping(boolean typing, @Nullable String entityName, @Nullable String imageId) {
+    public void setTyping(boolean typing, @Nullable String entityName, @Nullable String nameTemplate, @Nullable String imageId) {
         boolean wasTyping = this.isTyping;
         this.isTyping = typing;
-        this.typingEntityName = entityName;
+        this.typingEntityNameResolved = resolveTypingName(entityName, nameTemplate);
         this.typingEntityImageId = imageId;
         recalculateContentHeight();
 
         if (typing && !wasTyping) {
             scrollToBottom();
         }
+    }
+
+    private @Nullable String resolveTypingName(@Nullable String entityName, @Nullable String nameTemplate) {
+        if (nameTemplate == null || nameTemplate.isEmpty()) {
+            return entityName;
+        }
+        String resolved = ClientTemplateEngine.process(nameTemplate);
+        if (ClientTemplateEngine.hasPlaceholders(resolved)) {
+            return entityName;
+        }
+        return resolved;
     }
 
     private void scrollToMessage(int messageIndex) {
@@ -197,7 +218,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                 if (activeInput != null && activeInput.messageIndex() == i) {
                     boolean cursorVisible = ((System.currentTimeMillis() - cursorBlinkStart) / 500) % 2 == 0;
                     inputInfo = new MessageRenderer.ActiveInputInfo(
-                            i, activeInput.actionLabel(), activeInput.text().toString(),
+                            i, activeInput.actionIndex(), activeInput.text().toString(),
                             activeInput.isValid(), cursorVisible);
                 }
 
@@ -212,7 +233,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         if (isTyping && typingEntityImageId != null) {
             if (y + TYPING_INDICATOR_HEIGHT > getY() && y < getY() + height) {
                 MessageRenderer.renderTypingIndicator(graphics, minecraft,
-                        typingEntityName, typingEntityImageId,
+                        typingEntityNameResolved, typingEntityImageId,
                         getX() + MESSAGE_PADDING, y);
             }
         }
@@ -277,12 +298,13 @@ public class ChatHistoryWidget extends AbstractWidget {
             if (!message.actions().isEmpty()) {
                 int textX = getX() + MESSAGE_PADDING + AVATAR_SIZE + MESSAGE_PADDING;
                 int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
-                List<String> wrappedLines = MessageRenderer.wrapText(minecraft, message.content(), textWidth);
+                String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+                List<String> wrappedLines = MessageRenderer.wrapText(minecraft, resolvedContent, textWidth);
                 int textY = y + minecraft.font.lineHeight + 2 + (wrappedLines.size() * (minecraft.font.lineHeight + 2));
                 int buttonStartY = textY + BUTTON_PADDING;
 
                 // Calculate total button area height
-                int buttonRows = MessageRenderer.calculateButtonRows(minecraft, message.actions(), textWidth);
+                int buttonRows = MessageRenderer.calculateButtonRows(minecraft, message, textWidth);
                 int buttonAreaHeight = buttonRows * (BUTTON_HEIGHT + BUTTON_PADDING);
 
                 if (mouseY >= buttonStartY && mouseY < buttonStartY + buttonAreaHeight) {
@@ -290,17 +312,20 @@ public class ChatHistoryWidget extends AbstractWidget {
                     int buttonY = buttonStartY;
                     int maxButtonX = textX + textWidth;
 
-                    for (ChatAction action : message.actions()) {
+                    for (int actionIndex = 0; actionIndex < message.actions().size(); actionIndex++) {
+                        ChatAction action = message.actions().get(actionIndex);
+                        String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action);
+
                         // Check if this action is in input mode
                         boolean isActiveInput = activeInput != null
                                 && activeInput.messageIndex() == i
-                                && activeInput.actionLabel().equals(action.label());
+                                && activeInput.actionIndex() == actionIndex;
 
                         int buttonWidth;
                         if (isActiveInput && action.playerInput() != null) {
                             buttonWidth = ActionButtonRenderer.calculateInputModeWidth(minecraft, action.playerInput().maxLength());
                         } else {
-                            buttonWidth = ActionButtonRenderer.calculateWidth(minecraft, action);
+                            buttonWidth = ActionButtonRenderer.calculateWidth(minecraft, action, label);
                         }
 
                         // Wrap to next row if button doesn't fit
@@ -322,7 +347,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                                     // Clicked Send button
                                     if (activeInput.isValid() && entityId != null) {
                                         NetworkHandler.CHANNEL.sendToServer(
-                                                new ActionClickPacket(entityId, i, action.label(), activeInput.text().toString())
+                                                new ActionClickPacket(entityId, i, actionIndex, activeInput.text().toString())
                                         );
                                         activeInput = null;
                                     }
@@ -335,7 +360,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                             } else if (action.playerInput() != null) {
                                 // Clicked a playerInput action - activate input mode
                                 if (!InventoryHelper.isActionDisabled(minecraft, action)) {
-                                    activeInput = ActiveInputState.create(i, action.label(), action.playerInput());
+                                    activeInput = ActiveInputState.create(i, actionIndex, action.playerInput());
                                     cursorBlinkStart = System.currentTimeMillis();
                                 }
                                 return true;
@@ -347,7 +372,7 @@ public class ChatHistoryWidget extends AbstractWidget {
 
                                 if (entityId != null) {
                                     NetworkHandler.CHANNEL.sendToServer(
-                                            new ActionClickPacket(entityId, i, action.label())
+                                            new ActionClickPacket(entityId, i, actionIndex)
                                     );
                                 }
                                 return true;
@@ -387,7 +412,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         if (keyCode == 257 || keyCode == 335) { // GLFW_KEY_ENTER or GLFW_KEY_KP_ENTER
             if (activeInput.isValid() && entityId != null) {
                 NetworkHandler.CHANNEL.sendToServer(
-                        new ActionClickPacket(entityId, activeInput.messageIndex(), activeInput.actionLabel(), activeInput.text().toString())
+                        new ActionClickPacket(entityId, activeInput.messageIndex(), activeInput.actionIndex(), activeInput.text().toString())
                 );
                 activeInput = null;
             }

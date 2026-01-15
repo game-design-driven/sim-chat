@@ -19,7 +19,7 @@ import java.util.List;
  */
 public class NetworkHandler {
 
-    private static final String PROTOCOL_VERSION = "3";
+    private static final String PROTOCOL_VERSION = "4";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(SimChatMod.MOD_ID, "main"),
@@ -65,6 +65,16 @@ public class NetworkHandler {
                 SyncTeamDataPacket::encode,
                 SyncTeamDataPacket::decode,
                 SyncTeamDataPacket::handle);
+
+        CHANNEL.registerMessage(packetId++, ResolveTemplateRequestPacket.class,
+                ResolveTemplateRequestPacket::encode,
+                ResolveTemplateRequestPacket::decode,
+                ResolveTemplateRequestPacket::handle);
+
+        CHANNEL.registerMessage(packetId++, ResolveTemplateResponsePacket.class,
+                ResolveTemplateResponsePacket::encode,
+                ResolveTemplateResponsePacket::decode,
+                ResolveTemplateResponsePacket::handle);
     }
 
     /**

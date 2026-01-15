@@ -14,6 +14,9 @@ public class ServerConfig {
     // Permissions
     public static final ForgeConfigSpec.IntValue COMMAND_PERMISSION_LEVEL;
 
+    // Debug
+    public static final ForgeConfigSpec.BooleanValue DEBUG;
+
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
@@ -37,6 +40,12 @@ public class ServerConfig {
                 .comment("Required permission level to use /simchat commands (0-4)",
                         "0 = all players, 1 = moderators, 2 = gamemaster, 3 = admin, 4 = owner")
                 .defineInRange("commandPermissionLevel", 4, 0, 4);
+        builder.pop();
+
+        builder.comment("Debug Settings").push("debug");
+        DEBUG = builder
+                .comment("Enable verbose debug logging")
+                .define("enabled", false);
         builder.pop();
 
         SPEC = builder.build();

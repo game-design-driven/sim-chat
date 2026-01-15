@@ -1,19 +1,24 @@
 package com.yardenzamir.simchat.client.widget;
 
-import com.yardenzamir.simchat.client.AvatarManager;
-import com.yardenzamir.simchat.config.ClientConfig;
-import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.data.PlayerChatData;
-import com.yardenzamir.simchat.team.TeamData;
+import java.util.List;
+import java.util.function.Consumer;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
-import java.util.function.Consumer;
+import com.yardenzamir.simchat.client.AvatarManager;
+import com.yardenzamir.simchat.client.ClientTeamCache;
+import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
+import com.yardenzamir.simchat.client.SortMode;
+import com.yardenzamir.simchat.config.ClientConfig;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.data.PlayerChatData;
+import com.yardenzamir.simchat.team.TeamData;
 
 public class EntityListWidget extends ObjectSelectionList<EntityListWidget.EntityEntry> {
 
@@ -39,6 +44,10 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
         clearEntries();
         for (String entityId : entityIds) {
             int totalMessages = team.getMessageCount(entityId);
+            ChatMessage lastMessage = team.getLastMessage(entityId);
+            if (lastMessage != null) {
+                RuntimeTemplateResolver.preloadMessage(lastMessage);
+            }
             addEntry(new EntityEntry(
                 entityId,
                 team.getEntityDisplayName(entityId),
@@ -47,7 +56,7 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
                 readData.hasUnread(entityId, totalMessages),
                 readData.getUnreadCount(entityId, totalMessages),
                 team.isTyping(entityId),
-                team.getLastMessage(entityId)
+                lastMessage
             ));
         }
         if (selectedEntityId != null) {
@@ -186,21 +195,28 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
                 int textX = avatarX + AVATAR_SIZE + PADDING;
                 int textMaxWidth = contentRight - textX - PADDING - (hasUnread ? UNREAD_DOT_SIZE + PADDING : 0);
 
+                String resolvedName = displayName;
+                @Nullable String resolvedSubtitle = subtitle;
+                if (lastMessage != null) {
+                    resolvedName = RuntimeTemplateResolver.resolveSenderName(lastMessage);
+                    resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage);
+                }
+
                 // Name and subtitle on first line
-                String truncatedName = truncate(displayName, textMaxWidth);
+                String truncatedName = truncate(resolvedName, textMaxWidth);
                 graphics.drawString(minecraft.font, truncatedName, textX, top + PADDING, hasUnread ? 0xFFFFFFFF : 0xFFAAAAAA);
 
                 // Subtitle after name if there's space
-                if (subtitle != null && !subtitle.isEmpty()) {
+                if (resolvedSubtitle != null && !resolvedSubtitle.isEmpty()) {
                     int nameWidth = minecraft.font.width(truncatedName);
                     int subtitleX = textX + nameWidth + 4;
                     int subtitleMaxWidth = textMaxWidth - nameWidth - 4;
                     if (subtitleMaxWidth > 20) {
-                        graphics.drawString(minecraft.font, truncate(subtitle, subtitleMaxWidth), subtitleX, top + PADDING, 0xFF666666);
+                        graphics.drawString(minecraft.font, truncate(resolvedSubtitle, subtitleMaxWidth), subtitleX, top + PADDING, 0xFF666666);
                     }
                 }
 
-                String preview = isTyping ? "typing..." : (lastMessage != null ? (lastMessage.isPlayerMessage() ? "You: " : "") + lastMessage.content() : "");
+                String preview = isTyping ? "typing..." : (lastMessage != null ? (lastMessage.isPlayerMessage() ? "You: " : "") + RuntimeTemplateResolver.resolveContent(lastMessage) : "");
                 if (!preview.isEmpty() && textMaxWidth > 20) {
                     graphics.drawString(minecraft.font, truncate(preview, textMaxWidth), textX, top + PADDING + minecraft.font.lineHeight + 2, isTyping ? 0xFF88AAFF : 0xFF888888);
                 }

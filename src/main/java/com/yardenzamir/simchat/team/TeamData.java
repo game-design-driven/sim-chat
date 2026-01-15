@@ -1,18 +1,21 @@
 package com.yardenzamir.simchat.team;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.yardenzamir.simchat.data.ChatAction;
-import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.data.MessageType;
+import java.util.*;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.GsonHelper;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import com.yardenzamir.simchat.data.ChatAction;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.data.MessageType;
 
 /**
  * Stores all shared data for a team: conversations, flags, and membership.
@@ -28,6 +31,13 @@ public class TeamData {
     private final Map<String, Object> data = new HashMap<>();
     private final transient Set<String> typingEntities = new HashSet<>();
     private int revision = 0;
+
+    public static final String[] COLOR_NAMES = {
+            "black", "dark_blue", "dark_green", "dark_aqua",
+            "dark_red", "dark_purple", "gold", "gray",
+            "dark_gray", "blue", "green", "aqua",
+            "red", "light_purple", "yellow", "white"
+    };
 
     public TeamData(String id, String title) {
         this.id = id;
@@ -61,6 +71,15 @@ public class TeamData {
 
     public int getColor() {
         return color;
+    }
+
+    public String getColorName() {
+        return getColorName(color);
+    }
+
+    public static String getColorName(int colorIndex) {
+        int index = Math.max(0, Math.min(15, colorIndex));
+        return COLOR_NAMES[index];
     }
 
     public int getRevision() {
@@ -148,6 +167,22 @@ public class TeamData {
                 ChatMessage msg = messages.get(i);
                 if (!msg.isPlayerMessage()) {
                     return msg.senderName();
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Gets display name template for entity from most recent non-player message.
+     */
+    public @Nullable String getEntityDisplayNameTemplate(String entityId) {
+        List<ChatMessage> messages = conversations.get(entityId);
+        if (messages != null) {
+            for (int i = messages.size() - 1; i >= 0; i--) {
+                ChatMessage msg = messages.get(i);
+                if (!msg.isPlayerMessage()) {
+                    return msg.senderNameTemplate();
                 }
             }
         }
@@ -487,15 +522,25 @@ public class TeamData {
     private static JsonObject messageToJson(ChatMessage msg) {
         JsonObject json = new JsonObject();
         json.addProperty("type", msg.type().name());
+        json.addProperty("messageId", msg.messageId().toString());
         json.addProperty("entityId", msg.entityId());
         json.addProperty("senderName", msg.senderName());
+        if (msg.senderNameTemplate() != null) {
+            json.addProperty("senderNameTemplate", msg.senderNameTemplate());
+        }
         if (msg.senderSubtitle() != null) {
             json.addProperty("senderSubtitle", msg.senderSubtitle());
+        }
+        if (msg.senderSubtitleTemplate() != null) {
+            json.addProperty("senderSubtitleTemplate", msg.senderSubtitleTemplate());
         }
         if (msg.senderImageId() != null) {
             json.addProperty("senderImage", msg.senderImageId());
         }
         json.addProperty("content", msg.content());
+        if (msg.contentTemplate() != null) {
+            json.addProperty("contentTemplate", msg.contentTemplate());
+        }
         json.addProperty("worldDay", msg.worldDay());
         if (msg.playerUuid() != null) {
             json.addProperty("playerUuid", msg.playerUuid().toString());
@@ -531,15 +576,27 @@ public class TeamData {
             type = MessageType.ENTITY;
         }
         tag.putInt("type", type.ordinal());
+        if (json.has("messageId")) {
+            tag.putUUID("messageId", UUID.fromString(GsonHelper.getAsString(json, "messageId")));
+        }
         tag.putString("entityId", GsonHelper.getAsString(json, "entityId", ""));
         tag.putString("senderName", GsonHelper.getAsString(json, "senderName", ""));
+        if (json.has("senderNameTemplate")) {
+            tag.putString("senderNameTemplate", GsonHelper.getAsString(json, "senderNameTemplate"));
+        }
         if (json.has("senderSubtitle")) {
             tag.putString("senderSubtitle", GsonHelper.getAsString(json, "senderSubtitle"));
+        }
+        if (json.has("senderSubtitleTemplate")) {
+            tag.putString("senderSubtitleTemplate", GsonHelper.getAsString(json, "senderSubtitleTemplate"));
         }
         if (json.has("senderImage")) {
             tag.putString("senderImage", GsonHelper.getAsString(json, "senderImage"));
         }
         tag.putString("content", GsonHelper.getAsString(json, "content", ""));
+        if (json.has("contentTemplate")) {
+            tag.putString("contentTemplate", GsonHelper.getAsString(json, "contentTemplate"));
+        }
         tag.putLong("worldDay", GsonHelper.getAsLong(json, "worldDay", 0));
         if (json.has("playerUuid")) {
             tag.putUUID("playerUuid", UUID.fromString(GsonHelper.getAsString(json, "playerUuid")));
@@ -567,6 +624,9 @@ public class TeamData {
     private static JsonObject actionToJson(ChatAction action) {
         JsonObject json = new JsonObject();
         json.addProperty("label", action.label());
+        if (action.labelTemplate() != null) {
+            json.addProperty("labelTemplate", action.labelTemplate());
+        }
         JsonArray cmds = new JsonArray();
         for (String cmd : action.commands()) {
             cmds.add(cmd);
@@ -596,6 +656,9 @@ public class TeamData {
     private static CompoundTag actionFromJson(JsonObject json) {
         CompoundTag tag = new CompoundTag();
         tag.putString("label", GsonHelper.getAsString(json, "label", ""));
+        if (json.has("labelTemplate")) {
+            tag.putString("labelTemplate", GsonHelper.getAsString(json, "labelTemplate"));
+        }
         ListTag cmds = new ListTag();
         if (json.has("commands")) {
             for (JsonElement elem : GsonHelper.getAsJsonArray(json, "commands")) {

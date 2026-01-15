@@ -1,20 +1,24 @@
 package com.yardenzamir.simchat.client.widget;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.yardenzamir.simchat.client.AvatarManager;
-import com.yardenzamir.simchat.client.ClientTemplateEngine;
-import com.yardenzamir.simchat.client.PlayerSkinCache;
-import com.yardenzamir.simchat.config.ClientConfig;
-import com.yardenzamir.simchat.data.ChatAction;
-import com.yardenzamir.simchat.data.ChatMessage;
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.mojang.blaze3d.systems.RenderSystem;
+
+import org.jetbrains.annotations.Nullable;
+
+import com.yardenzamir.simchat.client.AvatarManager;
+import com.yardenzamir.simchat.client.PlayerSkinCache;
+import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
+import com.yardenzamir.simchat.config.ClientConfig;
+import com.yardenzamir.simchat.data.ChatAction;
+import com.yardenzamir.simchat.data.ChatMessage;
 
 import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
 
@@ -29,7 +33,7 @@ public final class MessageRenderer {
      */
     public record ActiveInputInfo(
             int messageIndex,
-            String actionLabel,
+            int actionIndex,
             String currentText,
             boolean isValid,
             boolean cursorVisible
@@ -40,7 +44,7 @@ public final class MessageRenderer {
      */
     public record RenderResult(
             boolean sendButtonClicked,
-            String clickedActionLabel
+            Integer clickedActionIndex
     ) {
         public static final RenderResult NONE = new RenderResult(false, null);
     }
@@ -65,13 +69,13 @@ public final class MessageRenderer {
         int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
 
         // Sender name with subtitle
+        String resolvedName = RuntimeTemplateResolver.resolveSenderName(message);
         int nameColor = message.isPlayerMessage() ? PLAYER_NAME_COLOR : ENTITY_NAME_COLOR;
-        graphics.drawString(mc.font, message.senderName(), textX, textY, nameColor);
-        int nextX = textX + mc.font.width(message.senderName());
+        graphics.drawString(mc.font, resolvedName, textX, textY, nameColor);
+        int nextX = textX + mc.font.width(resolvedName);
 
         // Show subtitle (entity subtitle or team title for player messages)
-        // Process templates like {team:title} at render time
-        String resolvedSubtitle = ClientTemplateEngine.process(message.senderSubtitle());
+        String resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(message);
         if (resolvedSubtitle != null && !resolvedSubtitle.isEmpty()) {
             String subtitle = " - " + resolvedSubtitle;
             graphics.drawString(mc.font, subtitle, nextX, textY, SUBTITLE_COLOR);
@@ -86,7 +90,8 @@ public final class MessageRenderer {
         textY += mc.font.lineHeight + 2;
 
         // Message content
-        List<String> wrappedLines = wrapText(mc, message.content(), textWidth);
+        String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+        List<String> wrappedLines = wrapText(mc, resolvedContent, textWidth);
         for (String line : wrappedLines) {
             graphics.drawString(mc.font, line, textX, textY, MESSAGE_TEXT_COLOR);
             textY += mc.font.lineHeight + 2;
@@ -99,17 +104,20 @@ public final class MessageRenderer {
             int buttonY = textY + BUTTON_PADDING;
             int maxButtonX = textX + textWidth;
 
-            for (ChatAction action : message.actions()) {
+            for (int actionIndex = 0; actionIndex < message.actions().size(); actionIndex++) {
+                ChatAction action = message.actions().get(actionIndex);
+                String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action);
+
                 // Check if this action is in input mode
                 boolean isActiveInput = activeInput != null
                         && activeInput.messageIndex() == index
-                        && activeInput.actionLabel().equals(action.label());
+                        && activeInput.actionIndex() == actionIndex;
 
                 int buttonWidth;
                 if (isActiveInput && action.playerInput() != null) {
                     buttonWidth = ActionButtonRenderer.calculateInputModeWidth(mc, action.playerInput().maxLength());
                 } else {
-                    buttonWidth = ActionButtonRenderer.calculateWidth(mc, action);
+                    buttonWidth = ActionButtonRenderer.calculateWidth(mc, action, label);
                 }
 
                 // Wrap to next row if button doesn't fit
@@ -125,10 +133,10 @@ public final class MessageRenderer {
                             activeInput.currentText(), activeInput.isValid(), activeInput.cursorVisible(),
                             mouseX, mouseY, hoverState);
                     if (inputResult.sendButtonHovered()) {
-                        result = new RenderResult(true, action.label());
+                        result = new RenderResult(true, actionIndex);
                     }
                 } else {
-                    ActionButtonRenderer.render(graphics, mc, action, buttonX, buttonY,
+                    ActionButtonRenderer.render(graphics, mc, action, label, buttonX, buttonY,
                             mouseX, mouseY, hoverState);
                 }
                 buttonX += buttonWidth + BUTTON_PADDING;
@@ -191,11 +199,14 @@ public final class MessageRenderer {
                 renderTransactionItems(graphics, mc, message.transactionOutput(),
                         currentX, itemY, OUTPUT_BG_COLOR, mouseX, mouseY, hoverState);
             }
-        } else if (!message.content().isEmpty()) {
-            int textWidth = mc.font.width(message.content());
-            int textX = x + (contentWidth - textWidth) / 2;
-            int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
-            graphics.drawString(mc.font, message.content(), textX, textY, SYSTEM_TEXT_COLOR);
+        } else {
+            String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+            if (!resolvedContent.isEmpty()) {
+                int textWidth = mc.font.width(resolvedContent);
+                int textX = x + (contentWidth - textWidth) / 2;
+                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
+                graphics.drawString(mc.font, resolvedContent, textX, textY, SYSTEM_TEXT_COLOR);
+            }
         }
     }
 
@@ -203,7 +214,7 @@ public final class MessageRenderer {
      * Renders the typing indicator.
      */
     public static void renderTypingIndicator(GuiGraphics graphics, Minecraft mc,
-                                             String entityName, String imageId,
+                                             @Nullable String entityName, String imageId,
                                              int x, int y) {
         ResourceLocation avatarTexture = AvatarManager.getTexture(imageId);
         graphics.blit(avatarTexture, x, y, AVATAR_SIZE, AVATAR_SIZE, 0, 0, 256, 256, 256, 256);
@@ -234,12 +245,13 @@ public final class MessageRenderer {
         }
 
         int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
-        List<String> wrappedLines = wrapText(mc, message.content(), textWidth);
+        String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+        List<String> wrappedLines = wrapText(mc, resolvedContent, textWidth);
         int textHeight = wrappedLines.size() * (mc.font.lineHeight + 2);
 
         int buttonRowHeight = 0;
         if (!message.actions().isEmpty()) {
-            int buttonRows = calculateButtonRows(mc, message.actions(), textWidth);
+            int buttonRows = calculateButtonRows(mc, message, textWidth);
             buttonRowHeight = buttonRows * (BUTTON_HEIGHT + BUTTON_PADDING);
         }
 
@@ -249,14 +261,16 @@ public final class MessageRenderer {
     /**
      * Calculates number of rows needed for action buttons given available width.
      */
-    public static int calculateButtonRows(Minecraft mc, List<ChatAction> actions, int maxWidth) {
-        if (actions.isEmpty()) return 0;
+    public static int calculateButtonRows(Minecraft mc, ChatMessage message, int maxWidth) {
+        if (message.actions().isEmpty()) return 0;
 
         int rows = 1;
         int currentX = 0;
 
-        for (ChatAction action : actions) {
-            int buttonWidth = ActionButtonRenderer.calculateWidth(mc, action);
+        for (int actionIndex = 0; actionIndex < message.actions().size(); actionIndex++) {
+            ChatAction action = message.actions().get(actionIndex);
+            String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action);
+            int buttonWidth = ActionButtonRenderer.calculateWidth(mc, action, label);
 
             if (currentX + buttonWidth > maxWidth && currentX > 0) {
                 rows++;

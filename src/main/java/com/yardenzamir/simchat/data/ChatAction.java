@@ -1,8 +1,8 @@
 package com.yardenzamir.simchat.data;
 
-import com.google.gson.JsonObject;
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -11,15 +11,18 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
+import com.google.gson.JsonObject;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Represents a clickable action button on a chat message.
  *
  * @param label        Button text shown to player
+ * @param labelTemplate Runtime template for label (if present)
  * @param commands     Commands to execute when clicked (in order)
  * @param replyText    If present, shows as player message before executing commands
  * @param itemsVisual  Items displayed on button (visual only, no functionality)
@@ -31,6 +34,7 @@ import java.util.List;
  */
 public record ChatAction(
         String label,
+        @Nullable String labelTemplate,
         List<String> commands,
         @Nullable String replyText,
         List<ActionItem> itemsVisual,
@@ -95,6 +99,7 @@ public record ChatAction(
     }
 
     private static final String TAG_LABEL = "label";
+    private static final String TAG_LABEL_TEMPLATE = "labelTemplate";
     private static final String TAG_COMMANDS = "commands";
     private static final String TAG_REPLY = "reply";
     private static final String TAG_ITEMS_VISUAL = "itemsVisual";
@@ -149,6 +154,9 @@ public record ChatAction(
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
         tag.putString(TAG_LABEL, label);
+        if (labelTemplate != null) {
+            tag.putString(TAG_LABEL_TEMPLATE, labelTemplate);
+        }
 
         // Save commands as list
         ListTag commandsList = new ListTag();
@@ -204,6 +212,7 @@ public record ChatAction(
 
     public static ChatAction fromNbt(CompoundTag tag) {
         String label = tag.getString(TAG_LABEL);
+        String labelTemplate = tag.contains(TAG_LABEL_TEMPLATE) ? tag.getString(TAG_LABEL_TEMPLATE) : null;
 
         List<String> commands = new ArrayList<>();
         if (tag.contains(TAG_COMMANDS)) {
@@ -224,7 +233,7 @@ public record ChatAction(
         List<ActionItem> itemsInput = itemListFromNbt(tag, TAG_ITEMS_INPUT);
         List<ActionItem> itemsOutput = itemListFromNbt(tag, TAG_ITEMS_OUTPUT);
 
-        return new ChatAction(label, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState, condition, playerInput);
+        return new ChatAction(label, labelTemplate, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState, condition, playerInput);
     }
 
     /**

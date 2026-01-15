@@ -1,23 +1,27 @@
 package com.yardenzamir.simchat.client.screen;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+
+import org.jetbrains.annotations.Nullable;
+
 import com.yardenzamir.simchat.capability.ChatCapability;
 import com.yardenzamir.simchat.client.ClientTeamCache;
+import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
 import com.yardenzamir.simchat.client.SortMode;
 import com.yardenzamir.simchat.client.widget.ChatHistoryWidget;
 import com.yardenzamir.simchat.client.widget.EntityListWidget;
 import com.yardenzamir.simchat.config.ClientConfig;
+import com.yardenzamir.simchat.data.ChatMessage;
 import com.yardenzamir.simchat.data.PlayerChatData;
 import com.yardenzamir.simchat.network.MarkAsReadPacket;
 import com.yardenzamir.simchat.network.NetworkHandler;
 import com.yardenzamir.simchat.team.TeamData;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 
 /**
  * Main chat screen with entity list sidebar and chat history panel.
@@ -30,6 +34,7 @@ public class ChatScreen extends Screen {
     private static final int DIVIDER_WIDTH = 5;
     private static final int COMPACT_WIDTH = 60;
     private static final int SNAP_THRESHOLD = 20;
+    private static final int HEADER_BUTTON_PADDING = 6;
 
     private @Nullable String selectedEntityId;
     private EntityListWidget entityList;
@@ -59,6 +64,7 @@ public class ChatScreen extends Screen {
         clampSidebarWidth();
 
         rebuildLayout();
+        RuntimeTemplateResolver.clear();
         refreshAll();
 
         if (selectedEntityId != null && !selectedEntityId.isEmpty()) {
@@ -113,6 +119,7 @@ public class ChatScreen extends Screen {
                 chatHistory.setTyping(
                         team.isTyping(selectedEntityId),
                         team.getEntityDisplayName(selectedEntityId),
+                        team.getEntityDisplayNameTemplate(selectedEntityId),
                         team.getEntityImageId(selectedEntityId)
                 );
             }
@@ -136,7 +143,10 @@ public class ChatScreen extends Screen {
         if (sortMode == SortMode.ALPHABETICAL) {
             List<String> sorted = new ArrayList<>(entityIds);
             sorted.sort(Comparator.comparing(id -> {
-                String name = team.getEntityDisplayName(id);
+                ChatMessage lastMessage = getLastNonPlayerMessage(team, id);
+                String name = lastMessage != null
+                        ? RuntimeTemplateResolver.resolveSenderName(lastMessage)
+                        : team.getEntityDisplayName(id);
                 return name != null ? name.toLowerCase() : id.toLowerCase();
             }));
             return sorted;
@@ -148,6 +158,45 @@ public class ChatScreen extends Screen {
         sortMode = sortMode.next();
         ClientConfig.SIDEBAR_SORT_MODE.set(sortMode.getId());
         refreshAll();
+    }
+
+    private void handleRefresh() {
+        RuntimeTemplateResolver.clear();
+        refreshAll();
+        if (selectedEntityId != null) {
+            refreshChatHistory();
+        }
+    }
+
+    private Component getRefreshText() {
+        return Component.translatable("simchat.screen.refresh");
+    }
+
+    private int getRefreshButtonHeight() {
+        return font.lineHeight + 4;
+    }
+
+    private int getRefreshButtonWidth() {
+        return font.width(getRefreshText()) + HEADER_BUTTON_PADDING * 2;
+    }
+
+    private int getRefreshButtonX() {
+        int buttonWidth = getRefreshButtonWidth();
+        int x = width - PADDING - buttonWidth;
+        int minX = sidebarWidth + PADDING;
+        return Math.max(minX, x);
+    }
+
+    private int getRefreshButtonY() {
+        return PADDING + 2;
+    }
+
+    private boolean isOverRefreshButton(double mouseX, double mouseY) {
+        int x = getRefreshButtonX();
+        int y = getRefreshButtonY();
+        int width = getRefreshButtonWidth();
+        int height = getRefreshButtonHeight();
+        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
     private void selectFirstEntity() {
@@ -182,6 +231,7 @@ public class ChatScreen extends Screen {
         chatHistory.setTyping(
                 team.isTyping(entityId),
                 team.getEntityDisplayName(entityId),
+                team.getEntityDisplayNameTemplate(entityId),
                 team.getEntityImageId(entityId)
         );
 
@@ -191,6 +241,17 @@ public class ChatScreen extends Screen {
 
         // Track typing state for change detection
         lastTypingState = team.isTyping(entityId);
+    }
+
+    private @Nullable ChatMessage getLastNonPlayerMessage(TeamData team, String entityId) {
+        List<ChatMessage> messages = team.getMessages(entityId);
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (!msg.isPlayerMessage()) {
+                return msg;
+            }
+        }
+        return null;
     }
 
     private void refreshChatHistory() {
@@ -204,6 +265,7 @@ public class ChatScreen extends Screen {
         chatHistory.setTyping(
                 team.isTyping(selectedEntityId),
                 team.getEntityDisplayName(selectedEntityId),
+                team.getEntityDisplayNameTemplate(selectedEntityId),
                 team.getEntityImageId(selectedEntityId)
         );
     }
@@ -229,12 +291,17 @@ public class ChatScreen extends Screen {
         // Header with selected entity name
         TeamData team = ClientTeamCache.getTeam();
         if (selectedEntityId != null && team != null) {
-            String displayName = team.getEntityDisplayName(selectedEntityId);
+            ChatMessage lastMessage = getLastNonPlayerMessage(team, selectedEntityId);
+            String displayName = lastMessage != null
+                    ? RuntimeTemplateResolver.resolveSenderName(lastMessage)
+                    : team.getEntityDisplayName(selectedEntityId);
             if (displayName == null) displayName = selectedEntityId;
             int nameX = sidebarWidth + PADDING;
             graphics.drawString(font, displayName, nameX, PADDING + 4, 0xFFFFFFFF);
 
-            String subtitle = team.getEntitySubtitle(selectedEntityId);
+            String subtitle = lastMessage != null
+                    ? RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage)
+                    : team.getEntitySubtitle(selectedEntityId);
             if (subtitle != null) {
                 int subtitleX = nameX + font.width(displayName);
                 graphics.drawString(font, " - " + subtitle, subtitleX, PADDING + 4, 0xFF888888);
@@ -246,6 +313,19 @@ public class ChatScreen extends Screen {
             int centerY = height / 2;
             graphics.drawString(font, emptyText, centerX - textWidth / 2, centerY, 0xFF888888);
         }
+
+        Component refreshText = getRefreshText();
+        int refreshButtonWidth = getRefreshButtonWidth();
+        int refreshButtonHeight = getRefreshButtonHeight();
+        int refreshButtonX = getRefreshButtonX();
+        int refreshButtonY = getRefreshButtonY();
+        boolean refreshHovered = isOverRefreshButton(mouseX, mouseY);
+        int refreshBg = refreshHovered ? 0xFF404060 : 0xFF303050;
+        graphics.fill(refreshButtonX, refreshButtonY, refreshButtonX + refreshButtonWidth,
+                refreshButtonY + refreshButtonHeight, refreshBg);
+        graphics.drawString(font, refreshText,
+                refreshButtonX + (refreshButtonWidth - font.width(refreshText)) / 2,
+                refreshButtonY + 2, 0xFFCCCCCC);
 
         graphics.fill(sidebarWidth, HEADER_HEIGHT, width, HEADER_HEIGHT + 1, 0xFF3d3d5c);
 
@@ -281,6 +361,11 @@ public class ChatScreen extends Screen {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0 && isOverDivider(mouseX)) {
             draggingDivider = true;
+            return true;
+        }
+
+        if (button == 0 && isOverRefreshButton(mouseX, mouseY)) {
+            handleRefresh();
             return true;
         }
 

@@ -1,11 +1,15 @@
 package com.yardenzamir.simchat.condition;
 
-import com.yardenzamir.simchat.SimChatMod;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.jetbrains.annotations.Nullable;
+
+import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.config.ServerConfig;
+import com.yardenzamir.simchat.team.TeamData;
 
 /**
  * Processes template strings with placeholders like {prefix:name}.
@@ -20,6 +24,17 @@ public final class TemplateEngine {
     private static final Map<String, TemplateResolver> resolvers = new HashMap<>();
 
     private TemplateEngine() {}
+
+    /**
+     * Result of compile/runtime template processing.
+     * @param compiledText Resolved compile placeholders (runtime placeholders preserved)
+     * @param runtimeTemplate Template containing runtime placeholders (null if none)
+     */
+    public record TemplateCompilation(@Nullable String compiledText, @Nullable String runtimeTemplate) {
+        public boolean hasRuntime() {
+            return runtimeTemplate != null;
+        }
+    }
 
     /**
      * Registers a resolver for a given prefix.
@@ -71,6 +86,77 @@ public final class TemplateEngine {
         matcher.appendTail(result);
 
         return result.toString();
+    }
+
+    /**
+     * Compiles a template string, resolving compile placeholders and preserving runtime placeholders.
+     */
+    public static TemplateCompilation compile(String template, CallbackContext ctx) {
+        return compile(template, ctx, false);
+    }
+
+    /**
+     * Resolves compile/runtime placeholders immediately.
+     */
+    public static String resolveWithPrefixes(String template, CallbackContext ctx) {
+        return compile(template, ctx, true).compiledText();
+    }
+
+    private static TemplateCompilation compile(String template, CallbackContext ctx, boolean resolveRuntime) {
+        if (template == null || template.isEmpty() || !template.contains("{")) {
+            return new TemplateCompilation(template, null);
+        }
+
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);
+        StringBuilder compiled = new StringBuilder();
+        StringBuilder runtime = new StringBuilder();
+        boolean hasRuntime = false;
+        int lastEnd = 0;
+
+        while (matcher.find()) {
+            compiled.append(template, lastEnd, matcher.start());
+            runtime.append(template, lastEnd, matcher.start());
+
+            String prefix = matcher.group(1);
+            String name = matcher.group(2);
+            boolean runtimePlaceholder = false;
+
+            if ("compile".equals(prefix) || "runtime".equals(prefix)) {
+                int split = name.indexOf(':');
+                if (split <= 0 || split >= name.length() - 1) {
+                    throw new IllegalArgumentException("Invalid " + prefix + " placeholder: " + matcher.group(0));
+                }
+                runtimePlaceholder = "runtime".equals(prefix);
+                prefix = name.substring(0, split);
+                name = name.substring(split + 1);
+            }
+
+            if (runtimePlaceholder && !resolveRuntime) {
+                String placeholder = "{" + prefix + ":" + name + "}";
+                compiled.append(placeholder);
+                runtime.append(placeholder);
+                hasRuntime = true;
+            } else {
+                String replacement = resolve(prefix, name, ctx);
+                if (replacement == null) {
+                    replacement = "{" + prefix + ":" + name + "}";
+                }
+                compiled.append(replacement);
+                runtime.append(replacement);
+            }
+
+            lastEnd = matcher.end();
+        }
+
+        compiled.append(template, lastEnd, template.length());
+        runtime.append(template, lastEnd, template.length());
+
+        TemplateCompilation result = new TemplateCompilation(compiled.toString(), hasRuntime ? runtime.toString() : null);
+        if (ServerConfig.DEBUG.get()) {
+            SimChatMod.LOGGER.info("[TemplateEngine] compile '{}' -> compiled='{}', runtime='{}'", 
+                    template, result.compiledText(), result.runtimeTemplate());
+        }
+        return result;
     }
 
     /**
@@ -134,7 +220,7 @@ public final class TemplateEngine {
                 case "id" -> ctx.team().getId();
                 case "title" -> ctx.team().getTitle();
                 case "memberCount" -> String.valueOf(ctx.team().getMemberCount());
-                case "color" -> String.valueOf(ctx.team().getColor());
+                case "color" -> TeamData.getColorName(ctx.team().getColor());
                 default -> null;
             };
         });

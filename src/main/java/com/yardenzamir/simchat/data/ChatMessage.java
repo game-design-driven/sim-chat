@@ -1,14 +1,15 @@
 package com.yardenzamir.simchat.data;
 
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Represents a single chat message in a conversation.
@@ -16,11 +17,15 @@ import java.util.UUID;
 public final class ChatMessage {
 
     private static final String TAG_TYPE = "type";
+    private static final String TAG_MESSAGE_ID = "messageId";
     private static final String TAG_ENTITY_ID = "entityId";
     private static final String TAG_SENDER_NAME = "senderName";
+    private static final String TAG_SENDER_NAME_TEMPLATE = "senderNameTemplate";
     private static final String TAG_SENDER_SUBTITLE = "senderSubtitle";
+    private static final String TAG_SENDER_SUBTITLE_TEMPLATE = "senderSubtitleTemplate";
     private static final String TAG_SENDER_IMAGE = "senderImage";
     private static final String TAG_CONTENT = "content";
+    private static final String TAG_CONTENT_TEMPLATE = "contentTemplate";
     private static final String TAG_WORLD_DAY = "worldDay";
     private static final String TAG_ACTIONS = "actions";
     private static final String TAG_TRANSACTION_INPUT = "transactionInput";
@@ -34,28 +39,37 @@ public final class ChatMessage {
     public static final String DEFAULT_PLAYER_SUBTITLE = "{team:title}";
 
     private final MessageType type;
+    private final UUID messageId;
     private final String entityId;
     private final String senderName;
+    private final @Nullable String senderNameTemplate;
     private final @Nullable String senderSubtitle;
+    private final @Nullable String senderSubtitleTemplate;
     private final @Nullable String senderImageId;
     private final String content;
+    private final @Nullable String contentTemplate;
     private final long worldDay;
     private final List<ChatAction> actions;
     private final List<ChatAction.ActionItem> transactionInput;
     private final List<ChatAction.ActionItem> transactionOutput;
     private final @Nullable UUID playerUuid;
 
-    private ChatMessage(MessageType type, String entityId, String senderName,
-                        @Nullable String senderSubtitle, @Nullable String senderImageId,
-                        String content, long worldDay, List<ChatAction> actions,
+    private ChatMessage(MessageType type, UUID messageId, String entityId, String senderName,
+                        @Nullable String senderNameTemplate, @Nullable String senderSubtitle,
+                        @Nullable String senderSubtitleTemplate, @Nullable String senderImageId,
+                        String content, @Nullable String contentTemplate, long worldDay, List<ChatAction> actions,
                         List<ChatAction.ActionItem> transactionInput, List<ChatAction.ActionItem> transactionOutput,
                         @Nullable UUID playerUuid) {
         this.type = type;
+        this.messageId = messageId;
         this.entityId = entityId;
         this.senderName = senderName;
+        this.senderNameTemplate = senderNameTemplate;
         this.senderSubtitle = senderSubtitle;
+        this.senderSubtitleTemplate = senderSubtitleTemplate;
         this.senderImageId = senderImageId;
         this.content = content;
+        this.contentTemplate = contentTemplate;
         this.worldDay = worldDay;
         this.actions = List.copyOf(actions);
         this.transactionInput = List.copyOf(transactionInput);
@@ -70,7 +84,16 @@ public final class ChatMessage {
      */
     public static ChatMessage fromEntity(String entityId, String displayName, @Nullable String subtitle,
                                          String imageId, String content, long worldDay, List<ChatAction> actions) {
-        return new ChatMessage(MessageType.ENTITY, entityId, displayName, subtitle, imageId, content, worldDay, actions,
+        return fromEntity(entityId, displayName, subtitle, imageId, content,
+                null, null, null, worldDay, actions);
+    }
+
+    public static ChatMessage fromEntity(String entityId, String displayName, @Nullable String subtitle,
+                                         String imageId, String content, @Nullable String nameTemplate,
+                                         @Nullable String subtitleTemplate, @Nullable String contentTemplate,
+                                         long worldDay, List<ChatAction> actions) {
+        return new ChatMessage(MessageType.ENTITY, UUID.randomUUID(), entityId, displayName,
+                nameTemplate, subtitle, subtitleTemplate, imageId, content, contentTemplate, worldDay, actions,
                 Collections.emptyList(), Collections.emptyList(), null);
     }
 
@@ -82,9 +105,11 @@ public final class ChatMessage {
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
     public static ChatMessage fromPlayer(String entityId, UUID playerUuid, String playerName,
-                                         @Nullable String subtitleTemplate, String content, long worldDay) {
+                                         @Nullable String subtitleTemplate, String content,
+                                         @Nullable String contentTemplate, long worldDay) {
         String subtitle = subtitleTemplate != null ? subtitleTemplate : DEFAULT_PLAYER_SUBTITLE;
-        return new ChatMessage(MessageType.PLAYER, entityId, playerName, subtitle, null, content, worldDay,
+        return new ChatMessage(MessageType.PLAYER, UUID.randomUUID(), entityId, playerName, null,
+                subtitle, subtitle, null, content, contentTemplate, worldDay,
                 Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), playerUuid);
     }
 
@@ -94,7 +119,12 @@ public final class ChatMessage {
      * @param worldDay The current world day (level.getDayTime() / 24000)
      */
     public static ChatMessage systemMessage(String entityId, String content, long worldDay) {
-        return new ChatMessage(MessageType.SYSTEM, entityId, "", null, null, content, worldDay, Collections.emptyList(),
+        return systemMessage(entityId, content, null, worldDay);
+    }
+
+    public static ChatMessage systemMessage(String entityId, String content, @Nullable String contentTemplate, long worldDay) {
+        return new ChatMessage(MessageType.SYSTEM, UUID.randomUUID(), entityId, "", null, null,
+                null, null, content, contentTemplate, worldDay, Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList(), null);
     }
 
@@ -108,12 +138,17 @@ public final class ChatMessage {
     public static ChatMessage transactionMessage(String entityId, long worldDay,
                                                   List<ChatAction.ActionItem> inputItems,
                                                   List<ChatAction.ActionItem> outputItems) {
-        return new ChatMessage(MessageType.SYSTEM, entityId, "", null, null, "", worldDay, Collections.emptyList(),
+        return new ChatMessage(MessageType.SYSTEM, UUID.randomUUID(), entityId, "", null, null,
+                null, null, "", null, worldDay, Collections.emptyList(),
                 inputItems, outputItems, null);
     }
 
     public MessageType type() {
         return type;
+    }
+
+    public UUID messageId() {
+        return messageId;
     }
 
     public boolean isPlayerMessage() {
@@ -136,8 +171,16 @@ public final class ChatMessage {
         return senderName;
     }
 
+    public @Nullable String senderNameTemplate() {
+        return senderNameTemplate;
+    }
+
     public @Nullable String senderSubtitle() {
         return senderSubtitle;
+    }
+
+    public @Nullable String senderSubtitleTemplate() {
+        return senderSubtitleTemplate;
     }
 
     public @Nullable String senderImageId() {
@@ -146,6 +189,10 @@ public final class ChatMessage {
 
     public String content() {
         return content;
+    }
+
+    public @Nullable String contentTemplate() {
+        return contentTemplate;
     }
 
     /**
@@ -186,22 +233,33 @@ public final class ChatMessage {
      * Returns a copy of this message with actions cleared.
      */
     public ChatMessage withoutActions() {
-        return new ChatMessage(type, entityId, senderName, senderSubtitle, senderImageId,
-                content, worldDay, Collections.emptyList(), transactionInput, transactionOutput, playerUuid);
+        return new ChatMessage(type, messageId, entityId, senderName, senderNameTemplate, senderSubtitle,
+                senderSubtitleTemplate, senderImageId, content, contentTemplate, worldDay,
+                Collections.emptyList(), transactionInput, transactionOutput, playerUuid);
     }
 
     public CompoundTag toNbt() {
         CompoundTag tag = new CompoundTag();
         tag.putInt(TAG_TYPE, type.ordinal());
+        tag.putUUID(TAG_MESSAGE_ID, messageId);
         tag.putString(TAG_ENTITY_ID, entityId);
         tag.putString(TAG_SENDER_NAME, senderName);
+        if (senderNameTemplate != null) {
+            tag.putString(TAG_SENDER_NAME_TEMPLATE, senderNameTemplate);
+        }
         if (senderSubtitle != null) {
             tag.putString(TAG_SENDER_SUBTITLE, senderSubtitle);
+        }
+        if (senderSubtitleTemplate != null) {
+            tag.putString(TAG_SENDER_SUBTITLE_TEMPLATE, senderSubtitleTemplate);
         }
         if (senderImageId != null) {
             tag.putString(TAG_SENDER_IMAGE, senderImageId);
         }
         tag.putString(TAG_CONTENT, content);
+        if (contentTemplate != null) {
+            tag.putString(TAG_CONTENT_TEMPLATE, contentTemplate);
+        }
         tag.putLong(TAG_WORLD_DAY, worldDay);
 
         if (!actions.isEmpty()) {
@@ -261,13 +319,19 @@ public final class ChatMessage {
 
         MessageType type = MessageType.fromOrdinal(tag.getInt(TAG_TYPE));
 
+        UUID messageId = tag.hasUUID(TAG_MESSAGE_ID) ? tag.getUUID(TAG_MESSAGE_ID) : UUID.randomUUID();
+
         return new ChatMessage(
                 type,
+                messageId,
                 tag.getString(TAG_ENTITY_ID),
                 tag.getString(TAG_SENDER_NAME),
+                tag.contains(TAG_SENDER_NAME_TEMPLATE) ? tag.getString(TAG_SENDER_NAME_TEMPLATE) : null,
                 tag.contains(TAG_SENDER_SUBTITLE) ? tag.getString(TAG_SENDER_SUBTITLE) : null,
+                tag.contains(TAG_SENDER_SUBTITLE_TEMPLATE) ? tag.getString(TAG_SENDER_SUBTITLE_TEMPLATE) : null,
                 tag.contains(TAG_SENDER_IMAGE) ? tag.getString(TAG_SENDER_IMAGE) : null,
                 tag.getString(TAG_CONTENT),
+                tag.contains(TAG_CONTENT_TEMPLATE) ? tag.getString(TAG_CONTENT_TEMPLATE) : null,
                 day,
                 actions,
                 transactionInput,

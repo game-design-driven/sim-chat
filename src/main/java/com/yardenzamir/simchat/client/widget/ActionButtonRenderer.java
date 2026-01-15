@@ -1,13 +1,15 @@
 package com.yardenzamir.simchat.client.widget;
 
-import com.yardenzamir.simchat.data.ChatAction;
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
+import com.yardenzamir.simchat.data.ChatAction;
 
 import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
 
@@ -21,10 +23,10 @@ public final class ActionButtonRenderer {
      * Renders an action button.
      * @return true if hovered
      */
-    public static boolean render(GuiGraphics graphics, Minecraft mc, ChatAction action,
+    public static boolean render(GuiGraphics graphics, Minecraft mc, ChatAction action, String label,
                                  int buttonX, int buttonY, int mouseX, int mouseY,
                                  HoverState hoverState) {
-        int buttonWidth = calculateWidth(mc, action);
+        int buttonWidth = calculateWidth(mc, action, label);
         boolean hovered = mouseX >= buttonX && mouseX < buttonX + buttonWidth
                 && mouseY >= buttonY && mouseY < buttonY + BUTTON_HEIGHT;
 
@@ -53,8 +55,8 @@ public final class ActionButtonRenderer {
         int labelX = currentX + BUTTON_INTERNAL_PADDING;
         int textYOffset = (BUTTON_HEIGHT - mc.font.lineHeight) / 2;
         int textColor = isDisabled ? DISABLED_TEXT_COLOR : WHITE_TEXT_COLOR;
-        graphics.drawString(mc.font, action.label(), labelX, buttonY + textYOffset, textColor);
-        currentX = labelX + mc.font.width(action.label()) + BUTTON_INTERNAL_PADDING;
+        graphics.drawString(mc.font, label, labelX, buttonY + textYOffset, textColor);
+        currentX = labelX + mc.font.width(label) + BUTTON_INTERNAL_PADDING;
 
         // Render OUTPUT items (orange background)
         renderItems(graphics, mc, action.itemsOutput(), currentX, itemY, buttonY,
@@ -132,8 +134,8 @@ public final class ActionButtonRenderer {
     /**
      * Calculates the total width of an action button.
      */
-    public static int calculateWidth(Minecraft mc, ChatAction action) {
-        int width = mc.font.width(action.label()) + BUTTON_BASE_WIDTH_PADDING;
+    public static int calculateWidth(Minecraft mc, ChatAction action, String label) {
+        int width = mc.font.width(label) + BUTTON_BASE_WIDTH_PADDING;
         width += calculateItemsWidth(action.itemsInput());
         width += calculateItemsWidth(action.itemsVisual());
         width += calculateItemsWidth(action.itemsOutput());

@@ -1,14 +1,16 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.client.ClientTeamCache;
-import com.yardenzamir.simchat.team.TeamData;
+import java.util.function.Supplier;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.function.Supplier;
+import com.yardenzamir.simchat.client.ClientTeamCache;
+import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
+import com.yardenzamir.simchat.team.TeamData;
 
 /**
  * Syncs full team data from server to client.
@@ -46,5 +48,6 @@ public class SyncTeamDataPacket {
         }
         TeamData team = TeamData.fromNbt(packet.teamNbt);
         ClientTeamCache.setTeam(team);
+        RuntimeTemplateResolver.clear();
     }
 }

@@ -30,6 +30,9 @@ public class ClientConfig {
     public static final ForgeConfigSpec.BooleanValue NOTIFY_TEAMMATE_ACTIONS;
     public static final ForgeConfigSpec.BooleanValue TEAMMATE_ACTION_SOUND;
 
+    // Debug
+    public static final ForgeConfigSpec.BooleanValue DEBUG;
+
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
@@ -84,6 +87,12 @@ public class ClientConfig {
         TEAMMATE_ACTION_SOUND = builder
                 .comment("Play notification sound when a teammate clicks an action")
                 .define("teammateActionSound", true);
+        builder.pop();
+
+        builder.comment("Debug Settings").push("debug");
+        DEBUG = builder
+                .comment("Enable verbose debug logging")
+                .define("enabled", false);
         builder.pop();
 
         SPEC = builder.build();

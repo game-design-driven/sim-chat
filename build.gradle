@@ -3,7 +3,7 @@ plugins {
     id "maven-publish"
 }
 
-version = mod_version
+version = findProperty('mod_version') ?: mod_version
 group = mod_group
 archivesBaseName = mod_id
 

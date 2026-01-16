@@ -449,7 +449,7 @@ public class SimChatCommands {
         Component colorLabel = Component.literal("  Color: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
         int colorIndex = Math.max(0, Math.min(15, team.getColor()));
         Component colorVal = Component.literal(TeamData.getColorName(colorIndex))
-                .withStyle(Style.EMPTY.withColor(SOFT_COLOR_VALUES[colorIndex]));
+                .withStyle(Style.EMPTY.withColor(TeamData.getColorValue(colorIndex)));
         ctx.getSource().sendSuccess(() -> colorLabel.copy().append(colorVal), false);
 
         Component convsLabel = Component.literal("  Conversations: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
@@ -505,24 +505,7 @@ public class SimChatCommands {
         return 1;
     }
 
-    private static final int[] SOFT_COLOR_VALUES = {
-            0xFF2B2B2B, // black
-            0xFF3B4D8F, // dark_blue
-            0xFF3E7A5A, // dark_green
-            0xFF3A6E7A, // dark_aqua
-            0xFF8A4A4A, // dark_red
-            0xFF7A4A8A, // dark_purple
-            0xFFB48A55, // gold
-            0xFF9A9A9A, // gray
-            0xFF5A5A5A, // dark_gray
-            0xFF6B7DD9, // blue
-            0xFF7BCB8B, // green
-            0xFF7BCACD, // aqua
-            0xFFE07A7A, // red
-            0xFFC590E0, // light_purple
-            0xFFE6D37A, // yellow
-            0xFFF2F2F2  // white
-    };
+
 
     private static CompletableFuture<Suggestions> suggestColors(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
         for (String color : TeamData.COLOR_NAMES) {
@@ -565,7 +548,7 @@ public class SimChatCommands {
 
         String colorName = TeamData.getColorName(colorIndex);
         Component coloredName = Component.literal(colorName)
-                .withStyle(Style.EMPTY.withColor(SOFT_COLOR_VALUES[colorIndex]));
+                .withStyle(Style.EMPTY.withColor(TeamData.getColorValue(colorIndex)));
         ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.color_changed", coloredName), false);
         return 1;
     }

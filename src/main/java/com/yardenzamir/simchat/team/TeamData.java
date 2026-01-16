@@ -39,6 +39,25 @@ public class TeamData {
             "red", "light_purple", "yellow", "white"
     };
 
+    public static final int[] SOFT_COLOR_VALUES = {
+            0xFF2B2B2B, // black
+            0xFF3B4D8F, // dark_blue
+            0xFF3E7A5A, // dark_green
+            0xFF3A6E7A, // dark_aqua
+            0xFF8A4A4A, // dark_red
+            0xFF7A4A8A, // dark_purple
+            0xFFB48A55, // gold
+            0xFF9A9A9A, // gray
+            0xFF5A5A5A, // dark_gray
+            0xFF6B7DD9, // blue
+            0xFF7BCB8B, // green
+            0xFF7BCACD, // aqua
+            0xFFE07A7A, // red
+            0xFFC590E0, // light_purple
+            0xFFE6D37A, // yellow
+            0xFFF2F2F2  // white
+    };
+
     public TeamData(String id, String title) {
         this.id = id;
         this.title = title;
@@ -77,9 +96,18 @@ public class TeamData {
         return getColorName(color);
     }
 
+    public int getColorValue() {
+        return getColorValue(color);
+    }
+
     public static String getColorName(int colorIndex) {
         int index = Math.max(0, Math.min(15, colorIndex));
         return COLOR_NAMES[index];
+    }
+
+    public static int getColorValue(int colorIndex) {
+        int index = Math.max(0, Math.min(15, colorIndex));
+        return SOFT_COLOR_VALUES[index];
     }
 
     public int getRevision() {

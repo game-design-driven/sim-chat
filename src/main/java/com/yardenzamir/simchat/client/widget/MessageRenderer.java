@@ -14,11 +14,13 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import org.jetbrains.annotations.Nullable;
 
 import com.yardenzamir.simchat.client.AvatarManager;
+import com.yardenzamir.simchat.client.ClientTeamCache;
 import com.yardenzamir.simchat.client.PlayerSkinCache;
 import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
 import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.team.TeamData;
 
 import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
 
@@ -70,7 +72,7 @@ public final class MessageRenderer {
 
         // Sender name with subtitle
         String resolvedName = RuntimeTemplateResolver.resolveSenderName(message);
-        int nameColor = message.isPlayerMessage() ? PLAYER_NAME_COLOR : ENTITY_NAME_COLOR;
+        int nameColor = message.isPlayerMessage() ? getPlayerNameColor() : ENTITY_NAME_COLOR;
         graphics.drawString(mc.font, resolvedName, textX, textY, nameColor);
         int nextX = textX + mc.font.width(resolvedName);
 
@@ -308,6 +310,14 @@ public final class MessageRenderer {
             lines.add(currentLine.toString());
         }
         return lines;
+    }
+
+    private static int getPlayerNameColor() {
+        TeamData team = ClientTeamCache.getTeam();
+        if (team == null) {
+            return PLAYER_NAME_COLOR;
+        }
+        return TeamData.getColorValue(team.getColor());
     }
 
     private static void renderAvatar(GuiGraphics graphics, Minecraft mc, ChatMessage message, int x, int y) {

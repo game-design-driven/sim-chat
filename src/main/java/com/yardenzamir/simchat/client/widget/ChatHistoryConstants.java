@@ -33,7 +33,7 @@ public final class ChatHistoryConstants {
     public static final int DISABLED_BG_COLOR = 0xFF404040;
 
     // Text colors
-    public static final int PLAYER_NAME_COLOR = 0xFF88FF88;
+    public static final int PLAYER_NAME_COLOR = 0xFF7BCB8B;
     public static final int ENTITY_NAME_COLOR = 0xFF88AAFF;
     public static final int SUBTITLE_COLOR = 0xFF888888;
     public static final int DAY_TEXT_COLOR = 0xFF666666;

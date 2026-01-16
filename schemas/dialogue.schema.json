@@ -8,7 +8,7 @@
   "properties": {
     "entityId": {
       "type": "string",
-      "description": "Unique identifier for the entity. Used for conversation grouping and avatar lookup (loads from config/simchat/avatars/<entityId>.png)",
+      "description": "Unique identifier for the entity. Used for conversation grouping and avatar lookup (loads from config/simchat/entities/<entityId>.png)",
       "minLength": 1
     },
     "entityName": {
@@ -21,9 +21,24 @@
       "description": "Optional subtitle shown next to name (e.g., company, title, affiliation). Supports templates with {compile:...} or {runtime:...}."
     },
     "text": {
-      "type": "string",
-      "description": "Message content displayed in the chat. Supports templates with {compile:...} or {runtime:...}.",
-      "minLength": 1
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Message content displayed in the chat.",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "description": "Multiple text variants. Selection controlled by textMode.",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      ],
+      "description": "Message content displayed in the chat. Can be a single string or array of variants. Supports templates with {compile:...} or {runtime:...}."
+    },
+    "textMode": {
+      "$ref": "#/$defs/variantMode",
+      "description": "How to select from text variants. Default: random."
     },
     "actions": {
       "type": "array",
@@ -32,10 +47,30 @@
         "type": "object",
         "required": ["label"],
         "properties": {
-          "label": {
+          "id": {
             "type": "string",
-            "description": "Button text. Supports templates with {compile:...} or {runtime:...}.",
+            "description": "Action identifier. Required when using sequential/sequential_cycle modes for label or reply variants.",
             "minLength": 1
+          },
+          "label": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Button text.",
+                "minLength": 1
+              },
+              {
+                "type": "array",
+                "description": "Multiple label variants. Selection controlled by labelMode.",
+                "items": { "type": "string", "minLength": 1 },
+                "minItems": 1
+              }
+            ],
+            "description": "Button text. Can be a single string or array of variants. Supports templates with {compile:...} or {runtime:...}."
+          },
+          "labelMode": {
+            "$ref": "#/$defs/variantMode",
+            "description": "How to select from label variants. Default: random."
           },
           "commands": {
             "type": "array",
@@ -46,8 +81,23 @@
             "default": []
           },
           "reply": {
-            "type": "string",
-            "description": "Player's reply text shown in chat when button is clicked. Supports templates with {compile:...} or {runtime:...}."
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Player's reply text shown in chat when button is clicked."
+              },
+              {
+                "type": "array",
+                "description": "Multiple reply variants. Selection controlled by replyMode.",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            ],
+            "description": "Player's reply text shown in chat when button is clicked. Can be a single string or array of variants. Supports templates with {compile:...} or {runtime:...}."
+          },
+          "replyMode": {
+            "$ref": "#/$defs/variantMode",
+            "description": "How to select from reply variants. Default: random."
           },
           "nextState": {
             "type": "string",
@@ -120,6 +170,12 @@
     }
   },
   "$defs": {
+    "variantMode": {
+      "type": "string",
+      "enum": ["random", "sequential", "sequential_cycle"],
+      "default": "random",
+      "description": "Variant selection mode. 'random': pick randomly each time. 'sequential': advance through list, stick on last. 'sequential_cycle': advance through list, wrap around. Sequential modes require action 'id' to be set."
+    },
     "itemSpec": {
       "type": "object",
       "required": ["id"],
@@ -191,6 +247,22 @@
           "reply": "My name is {input:playerName}.",
           "commands": ["simchat team title {input:playerName}'s Party"],
           "nextState": "mypack:mayor/welcome_named"
+        }
+      ]
+    },
+    {
+      "$comment": "Example with text variants and sequential mode",
+      "entityId": "greeter",
+      "entityName": "Village Elder",
+      "text": ["Hello, traveler!", "Welcome back!", "Good to see you again!"],
+      "textMode": "sequential_cycle",
+      "actions": [
+        {
+          "id": "greet_back",
+          "label": ["Hello!", "Hi there!", "Greetings!"],
+          "labelMode": "random",
+          "reply": ["Hello to you too.", "Nice to meet you.", "Good day."],
+          "replyMode": "sequential"
         }
       ]
     }

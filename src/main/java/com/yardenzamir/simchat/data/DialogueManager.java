@@ -17,6 +17,7 @@ import java.util.Map;
 /**
  * Loads and manages dialogues from datapacks.
  * Dialogues are loaded from: data/<namespace>/simchat/<path>.json
+ * Only files with .json extension are loaded - other files (README.md, scripts, etc.) are ignored.
  */
 public class DialogueManager extends SimpleJsonResourceReloadListener {
 
@@ -38,6 +39,10 @@ public class DialogueManager extends SimpleJsonResourceReloadListener {
         for (Map.Entry<ResourceLocation, JsonElement> entry : entries.entrySet()) {
             ResourceLocation id = entry.getKey();
             try {
+                if (!entry.getValue().isJsonObject()) {
+                    SimChatMod.LOGGER.warn("Skipping non-object dialogue file: {}", id);
+                    continue;
+                }
                 DialogueData dialogue = DialogueData.fromJson(entry.getValue().getAsJsonObject());
                 dialogues.put(id, dialogue);
             } catch (Exception e) {

@@ -111,12 +111,12 @@ public class AvatarManager {
             NativeImage image = NativeImage.read(stream);
             DynamicTexture texture = new DynamicTexture(image);
 
-            ResourceLocation location = SimChatMod.id("avatar/" + imageId);
+            ResourceLocation location = SimChatMod.id("avatar/" + imageId.toLowerCase());
             Minecraft.getInstance().getTextureManager().register(location, texture);
 
             SimChatMod.LOGGER.debug("Loaded avatar texture: {}", imageId);
             return new CachedTexture(location, modTime, false);
-        } catch (IOException e) {
+        } catch (Exception e) {
             SimChatMod.LOGGER.error("Failed to load avatar image: {}", imagePath, e);
             return new CachedTexture(FALLBACK_TEXTURE, 0, true);
         }

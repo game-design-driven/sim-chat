@@ -82,8 +82,10 @@ public class EntityConfigManager {
             }
 
             return cache.get(entityId);
-        } catch (IOException e) {
+        } catch (Exception e) {
             SimChatMod.LOGGER.error("Failed to load entity config for {}: {}", entityId, e.getMessage());
+            cache.remove(entityId);
+            lastModified.remove(entityId);
             return null;
         }
     }

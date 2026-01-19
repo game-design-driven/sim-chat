@@ -2,6 +2,7 @@ package com.yardenzamir.simchat.client.widget;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -14,6 +15,7 @@ import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.yardenzamir.simchat.client.ClientTeamCache;
 import com.yardenzamir.simchat.client.ClientTemplateEngine;
 import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
 import com.yardenzamir.simchat.data.ChatAction;
@@ -44,11 +46,25 @@ public class ChatHistoryWidget extends AbstractWidget {
     private @Nullable ActiveInputState activeInput;
     private long cursorBlinkStart = 0;
 
+    // Chunked loading state
+    private int loadingIndex = 0;
+    private boolean isLoadingChunked = false;
+    private static final int CHUNK_SIZE = 50; // Process 50 messages per frame
+
+    // Lazy loading state
+    private boolean requestingOlderMessages = false;
+
+    // Scrollbar dragging state
+    private boolean draggingScrollbar = false;
+    private int dragStartY = 0;
+    private int dragStartScrollOffset = 0;
+
     /**
      * Tracks the state of an active text input field.
      */
     private record ActiveInputState(
             int messageIndex,
+            UUID messageId,
             int actionIndex,
             StringBuilder text,
             ChatAction.PlayerInputConfig config,
@@ -60,7 +76,7 @@ public class ChatHistoryWidget extends AbstractWidget {
             return compiledPattern.matcher(text).matches();
         }
 
-        static ActiveInputState create(int messageIndex, int actionIndex, ChatAction.PlayerInputConfig config) {
+        static ActiveInputState create(int messageIndex, UUID messageId, int actionIndex, ChatAction.PlayerInputConfig config) {
             Pattern pattern = null;
             if (config.pattern() != null) {
                 try {
@@ -69,7 +85,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                     // Invalid pattern - will always fail validation
                 }
             }
-            return new ActiveInputState(messageIndex, actionIndex, new StringBuilder(), config, pattern);
+            return new ActiveInputState(messageIndex, messageId, actionIndex, new StringBuilder(), config, pattern);
         }
     }
 
@@ -86,33 +102,64 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.messages.clear();
         this.messages.addAll(messages);
         this.entityId = entityId;
-        RuntimeTemplateResolver.preloadMessages(this.messages);
-        recalculateContentHeight();
+        this.requestingOlderMessages = false;
 
-        if (readCount < messages.size()) {
-            scrollToMessage(readCount);
-        } else {
-            scrollToBottom();
-        }
+        // Preload all messages for template resolution
+        RuntimeTemplateResolver.preloadMessages(this.messages, RuntimeTemplateResolver.ResolutionPriority.HIGH);
+
+        recalculateContentHeight();
+        scrollToBottom();
     }
 
-    public void updateMessages(List<ChatMessage> messages, String entityId) {
+    /**
+     * Updates messages for the current conversation, preserving scroll position appropriately.
+     * Used when messages are added or older messages are loaded.
+     */
+    public void updateMessages(List<ChatMessage> messages, @Nullable String entityId) {
         int oldCount = this.messages.size();
         int oldScrollOffset = this.scrollOffset;
+        int oldContentHeight = this.contentHeight;
+
+        // Detect if this is older messages loading (messages prepended) vs new messages (appended)
+        boolean loadingOlderMessages = false;
+        if (!this.messages.isEmpty() && !messages.isEmpty() && messages.size() > oldCount) {
+            // Check if the first old message is now at a different index
+            UUID firstOldId = this.messages.get(0).messageId();
+            int newIndex = -1;
+            for (int i = 0; i < messages.size(); i++) {
+                if (messages.get(i).messageId().equals(firstOldId)) {
+                    newIndex = i;
+                    break;
+                }
+            }
+            loadingOlderMessages = newIndex > 0;
+        }
 
         this.messages.clear();
         this.messages.addAll(messages);
         this.entityId = entityId;
-        if (RuntimeTemplateResolver.needsPreload()) {
-            RuntimeTemplateResolver.preloadMessages(this.messages);
-        } else if (this.messages.size() > oldCount) {
-            RuntimeTemplateResolver.preloadMessages(this.messages.subList(oldCount, this.messages.size()));
+
+        // Preload new messages for template resolution
+        if (messages.size() > oldCount) {
+            if (loadingOlderMessages) {
+                int newMessageCount = messages.size() - oldCount;
+                RuntimeTemplateResolver.preloadMessages(this.messages.subList(0, newMessageCount), RuntimeTemplateResolver.ResolutionPriority.HIGH);
+            } else {
+                RuntimeTemplateResolver.preloadMessages(this.messages.subList(oldCount, this.messages.size()), RuntimeTemplateResolver.ResolutionPriority.HIGH);
+            }
         }
+
         recalculateContentHeight();
 
-        if (messages.size() > oldCount) {
+        if (loadingOlderMessages) {
+            // Older messages loaded - adjust scroll to maintain view of same content
+            int heightDifference = contentHeight - oldContentHeight;
+            this.scrollOffset = clampScrollOffset(oldScrollOffset + heightDifference);
+        } else if (messages.size() > oldCount) {
+            // New messages arrived - scroll to bottom
             scrollToBottom();
         } else {
+            // Same or fewer messages - maintain scroll position
             this.scrollOffset = clampScrollOffset(oldScrollOffset);
         }
     }
@@ -126,6 +173,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.scrollOffset = 0;
         this.contentHeight = 0;
         this.activeInput = null;
+        this.requestingOlderMessages = false;
     }
 
     public void setTyping(boolean typing, @Nullable String entityName, @Nullable String nameTemplate, @Nullable String imageId) {
@@ -188,8 +236,71 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.contentHeight = totalHeight;
     }
 
+    /**
+     * Process a chunk of messages for preloading and height calculation.
+     * Called each frame until all messages are processed.
+     * Processes from newest to oldest for better UX.
+     */
+    private void processLoadingChunk() {
+        if (loadingIndex <= 0) {
+            isLoadingChunked = false;
+            // Final accurate height calculation
+            recalculateContentHeight();
+            return;
+        }
+
+        int startIndex = Math.max(0, loadingIndex - CHUNK_SIZE);
+        List<ChatMessage> chunk = messages.subList(startIndex, loadingIndex);
+
+        // Preload templates for this chunk
+        RuntimeTemplateResolver.preloadMessages(chunk, RuntimeTemplateResolver.ResolutionPriority.HIGH);
+
+        loadingIndex = startIndex;
+    }
+
+    /**
+     * Check if user scrolled near top and request older messages if available.
+     */
+    private void checkLazyLoadOlderMessages() {
+        if (entityId == null || requestingOlderMessages) {
+            return;
+        }
+
+        int threshold = com.yardenzamir.simchat.config.ClientConfig.LAZY_LOAD_THRESHOLD.get();
+        int batchSize = com.yardenzamir.simchat.config.ClientConfig.LAZY_LOAD_BATCH_SIZE.get();
+
+        // Check if scrolled near top
+        if (scrollOffset < threshold) {
+            // Check if there are older messages to load
+            if (ClientTeamCache.hasOlderMessages(entityId)) {
+                requestingOlderMessages = true;
+                int beforeIndex = ClientTeamCache.getOldestLoadedIndex(entityId);
+                if (beforeIndex <= 0) {
+                    beforeIndex = ClientTeamCache.getTotalMessageCount(entityId);
+                }
+                com.yardenzamir.simchat.network.NetworkHandler.requestOlderMessages(
+                        entityId, beforeIndex, batchSize);
+            }
+        }
+    }
+
+    /**
+     * Called when older messages finish loading.
+     */
+    public void onOlderMessagesLoaded() {
+        requestingOlderMessages = false;
+    }
+
     @Override
     protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // Process chunked loading if active
+        if (isLoadingChunked) {
+            processLoadingChunk();
+        }
+
+        // Check if we should load older messages
+        checkLazyLoadOlderMessages();
+
         // Clamp scroll in case dimensions changed since scroll was set
         scrollOffset = clampScrollOffset(scrollOffset);
 
@@ -258,6 +369,30 @@ public class ChatHistoryWidget extends AbstractWidget {
         }
     }
 
+    private boolean isMouseOverScrollbar(double mouseX, double mouseY) {
+        if (contentHeight <= height) return false;
+
+        int scrollbarX = getX() + width - SCROLLBAR_WIDTH - 1;
+        int scrollbarHeight = Math.max(SCROLLBAR_MIN_HEIGHT, (int) ((float) height / contentHeight * height));
+        int scrollbarY = getY() + (int) ((float) scrollOffset / (contentHeight - height) * (height - scrollbarHeight));
+
+        return mouseX >= scrollbarX && mouseX <= getX() + width - 1
+                && mouseY >= scrollbarY && mouseY <= scrollbarY + scrollbarHeight;
+    }
+
+    private void handleScrollbarDrag(double mouseY) {
+        if (contentHeight <= height) return;
+
+        int scrollbarHeight = Math.max(SCROLLBAR_MIN_HEIGHT, (int) ((float) height / contentHeight * height));
+        int availableHeight = height - scrollbarHeight;
+
+        int relativeY = (int) (mouseY - getY());
+        int scrollbarY = Math.max(0, Math.min(availableHeight, relativeY - scrollbarHeight / 2));
+
+        scrollOffset = (int) ((float) scrollbarY / availableHeight * (contentHeight - height));
+        scrollOffset = clampScrollOffset(scrollOffset);
+    }
+
     private void renderTooltips(GuiGraphics graphics, int mouseX, int mouseY) {
         if (hoverState.hasItemTooltip()) {
             graphics.renderTooltip(minecraft.font, hoverState.getHoveredItem(),
@@ -278,9 +413,36 @@ public class ChatHistoryWidget extends AbstractWidget {
     }
 
     @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (draggingScrollbar && button == 0) {
+            handleScrollbarDrag(mouseY);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && draggingScrollbar) {
+            draggingScrollbar = false;
+            return true;
+        }
+        return false;
+    }
+
+    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) {
             return false;
+        }
+
+        // Check if clicked on scrollbar
+        if (isMouseOverScrollbar(mouseX, mouseY)) {
+            draggingScrollbar = true;
+            dragStartY = (int) mouseY;
+            dragStartScrollOffset = scrollOffset;
+            handleScrollbarDrag(mouseY);
+            return true;
         }
 
         // Copy to avoid ConcurrentModificationException from network thread updates
@@ -298,7 +460,7 @@ public class ChatHistoryWidget extends AbstractWidget {
             if (!message.actions().isEmpty()) {
                 int textX = getX() + MESSAGE_PADDING + AVATAR_SIZE + MESSAGE_PADDING;
                 int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
-                String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+                String resolvedContent = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
                 List<String> wrappedLines = MessageRenderer.wrapText(minecraft, resolvedContent, textWidth);
                 int textY = y + minecraft.font.lineHeight + 2 + (wrappedLines.size() * (minecraft.font.lineHeight + 2));
                 int buttonStartY = textY + BUTTON_PADDING;
@@ -314,7 +476,7 @@ public class ChatHistoryWidget extends AbstractWidget {
 
                     for (int actionIndex = 0; actionIndex < message.actions().size(); actionIndex++) {
                         ChatAction action = message.actions().get(actionIndex);
-                        String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action);
+                        String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action, RuntimeTemplateResolver.ResolutionPriority.HIGH);
 
                         // Check if this action is in input mode
                         boolean isActiveInput = activeInput != null
@@ -347,7 +509,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                                     // Clicked Send button
                                     if (activeInput.isValid() && entityId != null) {
                                         NetworkHandler.CHANNEL.sendToServer(
-                                                new ActionClickPacket(entityId, i, actionIndex, activeInput.text().toString())
+                                                new ActionClickPacket(entityId, activeInput.messageId(), actionIndex, activeInput.text().toString())
                                         );
                                         activeInput = null;
                                     }
@@ -360,7 +522,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                             } else if (action.playerInput() != null) {
                                 // Clicked a playerInput action - activate input mode
                                 if (!InventoryHelper.isActionDisabled(minecraft, action)) {
-                                    activeInput = ActiveInputState.create(i, actionIndex, action.playerInput());
+                                    activeInput = ActiveInputState.create(i, message.messageId(), actionIndex, action.playerInput());
                                     cursorBlinkStart = System.currentTimeMillis();
                                 }
                                 return true;
@@ -372,7 +534,7 @@ public class ChatHistoryWidget extends AbstractWidget {
 
                                 if (entityId != null) {
                                     NetworkHandler.CHANNEL.sendToServer(
-                                            new ActionClickPacket(entityId, i, actionIndex)
+                                            new ActionClickPacket(entityId, message.messageId(), actionIndex)
                                     );
                                 }
                                 return true;
@@ -412,7 +574,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         if (keyCode == 257 || keyCode == 335) { // GLFW_KEY_ENTER or GLFW_KEY_KP_ENTER
             if (activeInput.isValid() && entityId != null) {
                 NetworkHandler.CHANNEL.sendToServer(
-                        new ActionClickPacket(entityId, activeInput.messageIndex(), activeInput.actionIndex(), activeInput.text().toString())
+                        new ActionClickPacket(entityId, activeInput.messageId(), activeInput.actionIndex(), activeInput.text().toString())
                 );
                 activeInput = null;
             }

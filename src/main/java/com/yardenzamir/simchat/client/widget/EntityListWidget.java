@@ -43,10 +43,10 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
     public void setEntities(TeamData team, PlayerChatData readData, List<String> entityIds) {
         clearEntries();
         for (String entityId : entityIds) {
-            int totalMessages = team.getMessageCount(entityId);
+            int totalMessages = ClientTeamCache.getTotalMessageCount(entityId);
             ChatMessage lastMessage = team.getLastMessage(entityId);
             if (lastMessage != null) {
-                RuntimeTemplateResolver.preloadMessage(lastMessage);
+                RuntimeTemplateResolver.preloadMessage(lastMessage, RuntimeTemplateResolver.ResolutionPriority.LOW);
             }
             addEntry(new EntityEntry(
                 entityId,
@@ -198,8 +198,11 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
                 String resolvedName = displayName;
                 @Nullable String resolvedSubtitle = subtitle;
                 if (lastMessage != null) {
-                    resolvedName = RuntimeTemplateResolver.resolveSenderName(lastMessage);
-                    resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage);
+                    resolvedName = RuntimeTemplateResolver.resolveSenderName(lastMessage, RuntimeTemplateResolver.ResolutionPriority.LOW);
+                    resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage, RuntimeTemplateResolver.ResolutionPriority.LOW);
+                }
+                if (resolvedName == null || resolvedName.isEmpty()) {
+                    resolvedName = entityId;
                 }
 
                 // Name and subtitle on first line
@@ -216,7 +219,7 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
                     }
                 }
 
-                String preview = isTyping ? "typing..." : (lastMessage != null ? (lastMessage.isPlayerMessage() ? "You: " : "") + RuntimeTemplateResolver.resolveContent(lastMessage) : "");
+                String preview = isTyping ? "typing..." : (lastMessage != null ? (lastMessage.isPlayerMessage() ? "You: " : "") + RuntimeTemplateResolver.resolveContent(lastMessage, RuntimeTemplateResolver.ResolutionPriority.LOW) : "");
                 if (!preview.isEmpty() && textMaxWidth > 20) {
                     graphics.drawString(minecraft.font, truncate(preview, textMaxWidth), textX, top + PADDING + minecraft.font.lineHeight + 2, isTyping ? 0xFF88AAFF : 0xFF888888);
                 }
@@ -247,7 +250,7 @@ public class EntityListWidget extends ObjectSelectionList<EntityListWidget.Entit
 
         @Override
         public Component getNarration() {
-            return Component.literal(displayName);
+            return Component.literal(displayName != null ? displayName : entityId);
         }
     }
 }

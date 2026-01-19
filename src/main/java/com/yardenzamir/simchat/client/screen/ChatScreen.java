@@ -145,7 +145,7 @@ public class ChatScreen extends Screen {
             sorted.sort(Comparator.comparing(id -> {
                 ChatMessage lastMessage = getLastNonPlayerMessage(team, id);
                 String name = lastMessage != null
-                        ? RuntimeTemplateResolver.resolveSenderName(lastMessage)
+                        ? RuntimeTemplateResolver.resolveSenderName(lastMessage, RuntimeTemplateResolver.ResolutionPriority.LOW)
                         : team.getEntityDisplayName(id);
                 return name != null ? name.toLowerCase() : id.toLowerCase();
             }));
@@ -224,7 +224,7 @@ public class ChatScreen extends Screen {
 
         // Get read count before marking as read
         int readCount = readData.getReadCount(entityId);
-        int totalMessages = team.getMessageCount(entityId);
+        int totalMessages = ClientTeamCache.getTotalMessageCount(entityId);
 
         // Set messages with scroll to first unread
         chatHistory.setMessages(team.getMessages(entityId), entityId, readCount);
@@ -270,6 +270,14 @@ public class ChatScreen extends Screen {
         );
     }
 
+    /**
+     * Called when new messages are loaded (for lazy loading).
+     */
+    public void refreshMessages() {
+        refreshChatHistory();
+        chatHistory.onOlderMessagesLoaded();
+    }
+
     private boolean isOverDivider(double mouseX) {
         int dividerX = sidebarWidth;
         return mouseX >= dividerX - DIVIDER_WIDTH / 2 && mouseX <= dividerX + DIVIDER_WIDTH / 2;
@@ -293,14 +301,14 @@ public class ChatScreen extends Screen {
         if (selectedEntityId != null && team != null) {
             ChatMessage lastMessage = getLastNonPlayerMessage(team, selectedEntityId);
             String displayName = lastMessage != null
-                    ? RuntimeTemplateResolver.resolveSenderName(lastMessage)
+                    ? RuntimeTemplateResolver.resolveSenderName(lastMessage, RuntimeTemplateResolver.ResolutionPriority.HIGH)
                     : team.getEntityDisplayName(selectedEntityId);
             if (displayName == null) displayName = selectedEntityId;
             int nameX = sidebarWidth + PADDING;
             graphics.drawString(font, displayName, nameX, PADDING + 4, 0xFFFFFFFF);
 
             String subtitle = lastMessage != null
-                    ? RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage)
+                    ? RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage, RuntimeTemplateResolver.ResolutionPriority.HIGH)
                     : team.getEntitySubtitle(selectedEntityId);
             if (subtitle != null) {
                 int subtitleX = nameX + font.width(displayName);
@@ -422,6 +430,14 @@ public class ChatScreen extends Screen {
     }
 
     @Override
+    public void removed() {
+        super.removed();
+        int keepCount = ClientConfig.CLOSED_CACHE_SIZE.get();
+        java.util.Set<java.util.UUID> retained = ClientTeamCache.trimToLatest(keepCount);
+        RuntimeTemplateResolver.retainMessages(retained);
+    }
+
+    @Override
     public void tick() {
         super.tick();
 
@@ -445,7 +461,7 @@ public class ChatScreen extends Screen {
             }
 
             if (selectedEntityId != null) {
-                int totalMessages = team.getMessageCount(selectedEntityId);
+                int totalMessages = ClientTeamCache.getTotalMessageCount(selectedEntityId);
                 readData.markAsRead(selectedEntityId, totalMessages);
                 NetworkHandler.CHANNEL.sendToServer(new MarkAsReadPacket(selectedEntityId));
             }

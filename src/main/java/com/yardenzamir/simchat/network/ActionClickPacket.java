@@ -1,6 +1,6 @@
 package com.yardenzamir.simchat.network;
 
-import java.util.List;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import net.minecraft.network.FriendlyByteBuf;
@@ -30,24 +30,24 @@ import com.yardenzamir.simchat.team.TeamData;
 public class ActionClickPacket {
 
     private final String entityId;
-    private final int messageIndex;
+    private final UUID messageId;
     private final int actionIndex;
     private final @Nullable String inputValue;
 
-    public ActionClickPacket(String entityId, int messageIndex, int actionIndex) {
-        this(entityId, messageIndex, actionIndex, null);
+    public ActionClickPacket(String entityId, UUID messageId, int actionIndex) {
+        this(entityId, messageId, actionIndex, null);
     }
 
-    public ActionClickPacket(String entityId, int messageIndex, int actionIndex, @Nullable String inputValue) {
+    public ActionClickPacket(String entityId, UUID messageId, int actionIndex, @Nullable String inputValue) {
         this.entityId = entityId;
-        this.messageIndex = messageIndex;
+        this.messageId = messageId;
         this.actionIndex = actionIndex;
         this.inputValue = inputValue;
     }
 
     public static void encode(ActionClickPacket packet, FriendlyByteBuf buf) {
         buf.writeUtf(packet.entityId);
-        buf.writeVarInt(packet.messageIndex);
+        buf.writeUUID(packet.messageId);
         buf.writeVarInt(packet.actionIndex);
         buf.writeBoolean(packet.inputValue != null);
         if (packet.inputValue != null) {
@@ -57,10 +57,10 @@ public class ActionClickPacket {
 
     public static ActionClickPacket decode(FriendlyByteBuf buf) {
         String entityId = buf.readUtf();
-        int messageIndex = buf.readVarInt();
+        UUID messageId = buf.readUUID();
         int actionIndex = buf.readVarInt();
         String inputValue = buf.readBoolean() ? buf.readUtf() : null;
-        return new ActionClickPacket(entityId, messageIndex, actionIndex, inputValue);
+        return new ActionClickPacket(entityId, messageId, actionIndex, inputValue);
     }
 
     public static void handle(ActionClickPacket packet, Supplier<NetworkEvent.Context> ctx) {
@@ -75,14 +75,17 @@ public class ActionClickPacket {
                 return;
             }
 
-            List<ChatMessage> messages = team.getMessages(packet.entityId);
-            if (packet.messageIndex < 0 || packet.messageIndex >= messages.size()) {
-                SimChatMod.LOGGER.warn("Invalid message index {} for entity {}",
-                        packet.messageIndex, packet.entityId);
+            com.yardenzamir.simchat.storage.SimChatDatabase.StoredMessage stored = manager.getMessageById(team, packet.messageId);
+            if (stored == null) {
+                SimChatMod.LOGGER.warn("Message {} not found for entity {}", packet.messageId, packet.entityId);
+                return;
+            }
+            if (!stored.entityId().equals(packet.entityId)) {
+                SimChatMod.LOGGER.warn("Message {} does not belong to entity {}", packet.messageId, packet.entityId);
                 return;
             }
 
-            ChatMessage message = messages.get(packet.messageIndex);
+            ChatMessage message = stored.message();
             if (packet.actionIndex < 0 || packet.actionIndex >= message.actions().size()) {
                 return;
             }
@@ -171,11 +174,14 @@ public class ActionClickPacket {
                 }
             }
 
-            // Consume actions (remove buttons after clicking) - affects whole team
-            team.consumeActions(packet.entityId, packet.messageIndex);
+            boolean actionsConsumed = manager.consumeActions(team, packet.messageId);
+            ChatMessage updatedMessage = actionsConsumed ? stored.message().withoutActions() : null;
+            int updatedMessageIndex = stored.messageIndex();
 
             // Add player reply if specified (with template processing for input values)
             long worldDay = player.level().getDayTime() / 24000L;
+            ChatMessage replyMessage = null;
+            int replyIndex = -1;
             if (action.replyText() != null && !action.replyText().isEmpty()) {
                 TemplateEngine.TemplateCompilation replyCompilation = TemplateEngine.compile(action.replyText(), callbackCtx);
                 String processedReply = replyCompilation.compiledText();
@@ -188,23 +194,41 @@ public class ActionClickPacket {
                         replyCompilation.runtimeTemplate(),
                         worldDay
                 );
-                team.addMessage(reply);
+                replyIndex = manager.appendMessage(team, reply);
+                if (replyIndex >= 0) {
+                    replyMessage = reply;
+                }
             }
 
             // Create transaction system message after reply
+            ChatMessage transactionMessage = null;
+            int transactionIndex = -1;
             if (!action.itemsInput().isEmpty() || !action.itemsOutput().isEmpty()) {
                 ChatMessage transactionMsg = ChatMessage.transactionMessage(
                         packet.entityId, worldDay,
                         action.itemsInput(), action.itemsOutput()
                 );
-                team.addMessage(transactionMsg);
+                transactionIndex = manager.appendMessage(team, transactionMsg);
+                if (transactionIndex >= 0) {
+                    transactionMessage = transactionMsg;
+                }
             }
 
             // Save team data
             manager.saveTeam(team);
 
-            // Sync to ALL team members
-            NetworkHandler.syncTeamToAllMembers(team, player.server);
+            int totalCount = manager.getMessageCount(team, packet.entityId);
+            if (actionsConsumed && updatedMessage != null) {
+                NetworkHandler.sendMessageToTeam(team, updatedMessage, updatedMessageIndex, totalCount, player.server, false);
+            }
+            if (replyMessage != null) {
+                int replyTotal = manager.getMessageCount(team, packet.entityId);
+                NetworkHandler.sendMessageToTeam(team, replyMessage, replyIndex, replyTotal, player.server, false);
+            }
+            if (transactionMessage != null) {
+                int transactionTotal = manager.getMessageCount(team, packet.entityId);
+                NetworkHandler.sendMessageToTeam(team, transactionMessage, transactionIndex, transactionTotal, player.server, false);
+            }
 
             // Trigger next dialogue state if specified
             if (action.nextState() != null && !action.nextState().isEmpty()) {

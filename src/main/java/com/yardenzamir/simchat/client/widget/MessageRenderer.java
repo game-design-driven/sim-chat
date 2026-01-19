@@ -71,13 +71,13 @@ public final class MessageRenderer {
         int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
 
         // Sender name with subtitle
-        String resolvedName = RuntimeTemplateResolver.resolveSenderName(message);
+        String resolvedName = RuntimeTemplateResolver.resolveSenderName(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
         int nameColor = message.isPlayerMessage() ? getPlayerNameColor() : ENTITY_NAME_COLOR;
         graphics.drawString(mc.font, resolvedName, textX, textY, nameColor);
         int nextX = textX + mc.font.width(resolvedName);
 
         // Show subtitle (entity subtitle or team title for player messages)
-        String resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(message);
+        String resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
         if (resolvedSubtitle != null && !resolvedSubtitle.isEmpty()) {
             String subtitle = " - " + resolvedSubtitle;
             graphics.drawString(mc.font, subtitle, nextX, textY, SUBTITLE_COLOR);
@@ -92,7 +92,7 @@ public final class MessageRenderer {
         textY += mc.font.lineHeight + 2;
 
         // Message content
-        String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+        String resolvedContent = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
         List<String> wrappedLines = wrapText(mc, resolvedContent, textWidth);
         for (String line : wrappedLines) {
             graphics.drawString(mc.font, line, textX, textY, MESSAGE_TEXT_COLOR);
@@ -108,7 +108,7 @@ public final class MessageRenderer {
 
             for (int actionIndex = 0; actionIndex < message.actions().size(); actionIndex++) {
                 ChatAction action = message.actions().get(actionIndex);
-                String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action);
+                String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action, RuntimeTemplateResolver.ResolutionPriority.HIGH);
 
                 // Check if this action is in input mode
                 boolean isActiveInput = activeInput != null
@@ -202,8 +202,9 @@ public final class MessageRenderer {
                         currentX, itemY, OUTPUT_BG_COLOR, mouseX, mouseY, hoverState);
             }
         } else {
-            String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+            String resolvedContent = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
             if (!resolvedContent.isEmpty()) {
+
                 int textWidth = mc.font.width(resolvedContent);
                 int textX = x + (contentWidth - textWidth) / 2;
                 int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
@@ -247,7 +248,7 @@ public final class MessageRenderer {
         }
 
         int textWidth = width - AVATAR_SIZE - MESSAGE_PADDING * 3;
-        String resolvedContent = RuntimeTemplateResolver.resolveContent(message);
+        String resolvedContent = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
         List<String> wrappedLines = wrapText(mc, resolvedContent, textWidth);
         int textHeight = wrappedLines.size() * (mc.font.lineHeight + 2);
 
@@ -271,7 +272,7 @@ public final class MessageRenderer {
 
         for (int actionIndex = 0; actionIndex < message.actions().size(); actionIndex++) {
             ChatAction action = message.actions().get(actionIndex);
-            String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action);
+            String label = RuntimeTemplateResolver.resolveActionLabel(message, actionIndex, action, RuntimeTemplateResolver.ResolutionPriority.HIGH);
             int buttonWidth = ActionButtonRenderer.calculateWidth(mc, action, label);
 
             if (currentX + buttonWidth > maxWidth && currentX > 0) {

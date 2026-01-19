@@ -1,17 +1,19 @@
 package com.yardenzamir.simchat.client;
 
-import com.yardenzamir.simchat.SimChatMod;
-import com.yardenzamir.simchat.client.screen.ChatScreen;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+
 import org.lwjgl.glfw.GLFW;
+
+import com.yardenzamir.simchat.client.screen.ChatScreen;
 
 /**
  * Handles client-side initialization and events.
@@ -54,7 +56,16 @@ public class ClientSetup {
     @SubscribeEvent
     public static void onClientDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
         ClientTeamCache.clear();
+        RuntimeTemplateResolver.clear();
         // Don't clear PlayerSkinCache - keep skins cached for offline teammates
+    }
+
+    @SubscribeEvent
+    public static void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
+        RuntimeTemplateResolver.flushQueuedRequests();
     }
 
     /**

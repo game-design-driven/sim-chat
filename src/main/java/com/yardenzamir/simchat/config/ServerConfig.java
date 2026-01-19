@@ -14,6 +14,10 @@ public class ServerConfig {
     // Permissions
     public static final ForgeConfigSpec.IntValue COMMAND_PERMISSION_LEVEL;
 
+    // History sync
+    public static final ForgeConfigSpec.IntValue INITIAL_SYNC_MESSAGE_COUNT;
+    public static final ForgeConfigSpec.IntValue MAX_LAZY_LOAD_BATCH_SIZE;
+
     // Debug
     public static final ForgeConfigSpec.BooleanValue DEBUG;
 
@@ -40,6 +44,15 @@ public class ServerConfig {
                 .comment("Required permission level to use /simchat commands (0-4)",
                         "0 = all players, 1 = moderators, 2 = gamemaster, 3 = admin, 4 = owner")
                 .defineInRange("commandPermissionLevel", 4, 0, 4);
+        builder.pop();
+
+        builder.comment("History Sync Settings").push("historySync");
+        INITIAL_SYNC_MESSAGE_COUNT = builder
+                .comment("How many recent messages per conversation to send on sync")
+                .defineInRange("initialMessageCount", 30, 0, 5000);
+        MAX_LAZY_LOAD_BATCH_SIZE = builder
+                .comment("Server-side cap for lazy load batch size")
+                .defineInRange("maxLazyLoadBatchSize", 100, 10, 2000);
         builder.pop();
 
         builder.comment("Debug Settings").push("debug");

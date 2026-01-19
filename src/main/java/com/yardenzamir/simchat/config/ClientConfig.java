@@ -23,6 +23,14 @@ public class ClientConfig {
     public static final ForgeConfigSpec.IntValue MESSAGE_PADDING;
     public static final ForgeConfigSpec.IntValue ENTITY_LIST_ITEM_HEIGHT;
 
+    // History loading
+    public static final ForgeConfigSpec.IntValue LAZY_LOAD_BATCH_SIZE;
+    public static final ForgeConfigSpec.IntValue LAZY_LOAD_THRESHOLD;
+    public static final ForgeConfigSpec.IntValue CLOSED_CACHE_SIZE;
+
+    // Templates
+    public static final ForgeConfigSpec.IntValue TEMPLATE_REQUESTS_PER_TICK;
+
     // Sort mode (0 = recent, 1 = alphabetical)
     public static final ForgeConfigSpec.IntValue SIDEBAR_SORT_MODE;
 
@@ -78,6 +86,24 @@ public class ClientConfig {
         SIDEBAR_SORT_MODE = builder
                 .comment("Sort mode for conversation list (0 = Recent, 1 = Alphabetical)")
                 .defineInRange("sidebarSortMode", 0, 0, 1);
+        builder.pop();
+
+        builder.comment("History Loading Settings").push("history");
+        LAZY_LOAD_BATCH_SIZE = builder
+                .comment("How many messages to request when scrolling up")
+                .defineInRange("lazyLoadBatchSize", 30, 10, 2000);
+        LAZY_LOAD_THRESHOLD = builder
+                .comment("Distance from top (pixels) before requesting older messages")
+                .defineInRange("lazyLoadThreshold", 100, 20, 500);
+        CLOSED_CACHE_SIZE = builder
+                .comment("Messages to keep per conversation after closing chat")
+                .defineInRange("closedCacheSize", 400, 1, 5000);
+        builder.pop();
+
+        builder.comment("Template Settings").push("templates");
+        TEMPLATE_REQUESTS_PER_TICK = builder
+                .comment("How many runtime template requests to send per client tick")
+                .defineInRange("requestsPerTick", 20, 1, 200);
         builder.pop();
 
         builder.comment("Team Settings").push("team");

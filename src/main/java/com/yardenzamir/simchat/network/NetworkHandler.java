@@ -1,10 +1,10 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.SimChatMod;
-import com.yardenzamir.simchat.capability.ChatCapability;
-import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.team.SimChatTeamManager;
-import com.yardenzamir.simchat.team.TeamData;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,14 +12,19 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
-import java.util.List;
+import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.config.ServerConfig;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.team.SimChatTeamManager;
+import com.yardenzamir.simchat.team.TeamData;
 
 /**
  * Handles network packet registration and sending.
  */
 public class NetworkHandler {
 
-    private static final String PROTOCOL_VERSION = "4";
+    private static final String PROTOCOL_VERSION = "5";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(SimChatMod.MOD_ID, "main"),
@@ -61,11 +66,6 @@ public class NetworkHandler {
                 MarkAsReadPacket::decode,
                 MarkAsReadPacket::handle);
 
-        CHANNEL.registerMessage(packetId++, SyncTeamDataPacket.class,
-                SyncTeamDataPacket::encode,
-                SyncTeamDataPacket::decode,
-                SyncTeamDataPacket::handle);
-
         CHANNEL.registerMessage(packetId++, ResolveTemplateRequestPacket.class,
                 ResolveTemplateRequestPacket::encode,
                 ResolveTemplateRequestPacket::decode,
@@ -75,6 +75,21 @@ public class NetworkHandler {
                 ResolveTemplateResponsePacket::encode,
                 ResolveTemplateResponsePacket::decode,
                 ResolveTemplateResponsePacket::handle);
+
+        CHANNEL.registerMessage(packetId++, SyncTeamMetadataPacket.class,
+                SyncTeamMetadataPacket::encode,
+                SyncTeamMetadataPacket::decode,
+                SyncTeamMetadataPacket::handle);
+
+        CHANNEL.registerMessage(packetId++, SyncMessagesPacket.class,
+                SyncMessagesPacket::encode,
+                SyncMessagesPacket::decode,
+                SyncMessagesPacket::handle);
+
+        CHANNEL.registerMessage(packetId++, RequestOlderMessagesPacket.class,
+                RequestOlderMessagesPacket::encode,
+                RequestOlderMessagesPacket::decode,
+                RequestOlderMessagesPacket::handle);
     }
 
     /**
@@ -111,11 +126,56 @@ public class NetworkHandler {
 
     // === Team sync methods ===
 
+
     /**
-     * Syncs team data to a specific player.
+     * Syncs team metadata and recent messages (hybrid approach).
+     * Sends metadata + last 500 messages per conversation.
      */
-    public static void syncTeamToPlayer(ServerPlayer player, TeamData team) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new SyncTeamDataPacket(team));
+    public static void syncTeamWithLazyLoad(ServerPlayer player, TeamData team) {
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+
+        Map<String, Integer> messageCountPerEntity = new HashMap<>();
+        List<String> entityIds = team.getEntityIds();
+        for (String entityId : entityIds) {
+            int count = manager.getMessageCount(team, entityId);
+            messageCountPerEntity.put(entityId, count);
+        }
+        List<String> entityOrder = new java.util.ArrayList<>(entityIds);
+        Collections.reverse(entityOrder);
+
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new SyncTeamMetadataPacket(team.getId(), team.getTitle(), team.getColor(),
+                        new java.util.ArrayList<>(team.getMembers()), entityOrder, messageCountPerEntity, team.getAllData()));
+
+        int initialCount = ServerConfig.INITIAL_SYNC_MESSAGE_COUNT.get();
+        for (String entityId : entityIds) {
+            int totalCount = messageCountPerEntity.getOrDefault(entityId, 0);
+            if (totalCount <= 0 || initialCount <= 0) {
+                continue;
+            }
+            int startIndex = Math.max(0, totalCount - initialCount);
+            List<com.yardenzamir.simchat.data.ChatMessage> recent =
+                    manager.loadMessages(team, entityId, startIndex, totalCount - startIndex);
+
+            sendMessages(player, entityId, recent, totalCount, startIndex);
+        }
+    }
+
+    /**
+     * Sends a batch of messages to a player.
+     */
+    public static void sendMessages(ServerPlayer player, String entityId,
+                                    java.util.List<com.yardenzamir.simchat.data.ChatMessage> messages,
+                                    int totalCount, int startIndex) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new SyncMessagesPacket(entityId, messages, totalCount, startIndex));
+    }
+
+    /**
+     * Client requests older messages.
+     */
+    public static void requestOlderMessages(String entityId, int beforeIndex, int count) {
+        CHANNEL.sendToServer(new RequestOlderMessagesPacket(entityId, beforeIndex, count));
     }
 
     /**
@@ -125,18 +185,32 @@ public class NetworkHandler {
         SimChatTeamManager manager = SimChatTeamManager.get(server);
         List<ServerPlayer> members = manager.getOnlineTeamMembers(team);
         for (ServerPlayer member : members) {
-            syncTeamToPlayer(member, team);
+            syncTeamWithLazyLoad(member, team);
         }
     }
 
     /**
-     * Sends a new message to all online team members.
+     * Sends a new or updated message to all online team members.
      */
     public static void sendMessageToTeam(TeamData team, ChatMessage message, MinecraftServer server, boolean showToast) {
         SimChatTeamManager manager = SimChatTeamManager.get(server);
+        com.yardenzamir.simchat.storage.SimChatDatabase.StoredMessage stored = manager.getMessageById(team, message.messageId());
+        if (stored == null) {
+            return;
+        }
+        int totalCount = manager.getMessageCount(team, stored.entityId());
+        sendMessageToTeam(team, message, stored.messageIndex(), totalCount, server, showToast);
+    }
+
+    public static void sendMessageToTeam(TeamData team, ChatMessage message, int messageIndex, int totalCount,
+                                         MinecraftServer server, boolean showToast) {
+        SimChatTeamManager manager = SimChatTeamManager.get(server);
         List<ServerPlayer> members = manager.getOnlineTeamMembers(team);
         for (ServerPlayer member : members) {
-            sendNewMessage(member, message, showToast);
+            sendMessages(member, message.entityId(), java.util.List.of(message), totalCount, messageIndex);
+            if (showToast) {
+                sendNewMessage(member, message, true);
+            }
         }
     }
 

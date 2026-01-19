@@ -1,12 +1,13 @@
 package com.yardenzamir.simchat.team;
 
-import com.yardenzamir.simchat.SimChatMod;
-import com.yardenzamir.simchat.network.NetworkHandler;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+
+import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.network.NetworkHandler;
 
 /**
  * Handles player login/logout and server lifecycle events for teams.
@@ -27,7 +28,7 @@ public class TeamEventHandler {
         manager.syncPlayerToVanillaTeam(player, team);
 
         // Sync team data to the joining player
-        NetworkHandler.syncTeamToPlayer(player, team);
+        NetworkHandler.syncTeamWithLazyLoad(player, team);
     }
 
     @SubscribeEvent
@@ -55,7 +56,7 @@ public class TeamEventHandler {
         SimChatTeamManager manager = SimChatTeamManager.get(player.server);
         TeamData team = manager.getPlayerTeam(player);
         if (team != null) {
-            NetworkHandler.syncTeamToPlayer(player, team);
+            NetworkHandler.syncTeamWithLazyLoad(player, team);
         }
     }
 
@@ -69,14 +70,14 @@ public class TeamEventHandler {
         SimChatTeamManager manager = SimChatTeamManager.get(player.server);
         TeamData team = manager.getPlayerTeam(player);
         if (team != null) {
-            NetworkHandler.syncTeamToPlayer(player, team);
+            NetworkHandler.syncTeamWithLazyLoad(player, team);
         }
     }
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
-        // Save all teams when server stops
         SimChatTeamManager manager = SimChatTeamManager.get(event.getServer());
         manager.saveAllTeams();
+        manager.shutdown();
     }
 }

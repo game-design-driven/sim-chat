@@ -28,12 +28,16 @@ repositories {
         url 'https://maven.architectury.dev/'
         content { includeGroup 'dev.architectury' }
     }
+    maven {
+        url 'https://api.modrinth.com/maven'
+    }
 }
 
 dependencies {
     compileOnly 'org.jetbrains:annotations:24.1.0'
     // KubeJS - soft dependency for scripting integration
     compileOnly 'dev.latvian.mods:kubejs-forge:2001.6.5-build.16'
+    modImplementation 'maven.modrinth:minecraft-sqlite-jdbc:3.51.1.0+2025-12-01'
 }
 
 legacyForge {

@@ -1,25 +1,25 @@
 package com.yardenzamir.simchat.team;
 
-import java.util.*;
-
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
-import net.minecraft.util.GsonHelper;
-
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import org.jetbrains.annotations.Nullable;
 
-import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.data.MessageType;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 
 /**
  * Stores all shared data for a team: conversations, flags, and membership.
- * Persisted to JSON files in world/data/simchat/teams/.
+ * Persisted to SQLite via SimChatDatabase.
  */
 public class TeamData {
 
@@ -28,6 +28,7 @@ public class TeamData {
     private int color;
     private final Set<UUID> members = new HashSet<>();
     private final Map<String, List<ChatMessage>> conversations = new LinkedHashMap<>();
+    private final Map<String, ConversationMeta> conversationMeta = new LinkedHashMap<>();
     private final Map<String, Object> data = new HashMap<>();
     private final transient Set<String> typingEntities = new HashSet<>();
     private int revision = 0;
@@ -57,6 +58,42 @@ public class TeamData {
             0xFFE6D37A, // yellow
             0xFFF2F2F2  // white
     };
+
+    public static class ConversationMeta {
+        private int messageCount;
+        private @Nullable ChatMessage lastMessage;
+        private @Nullable ChatMessage lastEntityMessage;
+
+        public ConversationMeta(int messageCount, @Nullable ChatMessage lastMessage, @Nullable ChatMessage lastEntityMessage) {
+            this.messageCount = messageCount;
+            this.lastMessage = lastMessage;
+            this.lastEntityMessage = lastEntityMessage;
+        }
+
+        public int getMessageCount() {
+            return messageCount;
+        }
+
+        public void setMessageCount(int messageCount) {
+            this.messageCount = messageCount;
+        }
+
+        public @Nullable ChatMessage getLastMessage() {
+            return lastMessage;
+        }
+
+        public void setLastMessage(@Nullable ChatMessage lastMessage) {
+            this.lastMessage = lastMessage;
+        }
+
+        public @Nullable ChatMessage getLastEntityMessage() {
+            return lastEntityMessage;
+        }
+
+        public void setLastEntityMessage(@Nullable ChatMessage lastEntityMessage) {
+            this.lastEntityMessage = lastEntityMessage;
+        }
+    }
 
     public TeamData(String id, String title) {
         this.id = id;
@@ -164,6 +201,11 @@ public class TeamData {
         }
         msgs.add(message);
         conversations.put(entityId, msgs);
+
+        ConversationMeta meta = conversationMeta.get(entityId);
+        int newCount = meta != null ? Math.max(meta.getMessageCount() + 1, msgs.size()) : msgs.size();
+        ChatMessage lastEntityMessage = message.isPlayerMessage() ? getLastEntityMessage(entityId) : message;
+        setConversationMetaInternal(entityId, newCount, message, lastEntityMessage, true);
         revision++;
     }
 
@@ -171,16 +213,95 @@ public class TeamData {
         return conversations.getOrDefault(entityId, Collections.emptyList());
     }
 
+    public void setConversation(String entityId, List<ChatMessage> messages) {
+        conversations.put(entityId, new ArrayList<>(messages));
+        ChatMessage lastMessage = messages.isEmpty() ? null : messages.get(messages.size() - 1);
+        ChatMessage lastEntityMessage = findLastEntityMessage(messages);
+        int messageCount = Math.max(messages.size(), getMessageCount(entityId));
+        setConversationMetaInternal(entityId, messageCount, lastMessage, lastEntityMessage, false);
+        revision++;
+    }
+
+    public void setConversationMeta(String entityId, int messageCount, @Nullable ChatMessage lastMessage, @Nullable ChatMessage lastEntityMessage) {
+        setConversationMetaInternal(entityId, messageCount, lastMessage, lastEntityMessage, true);
+        revision++;
+    }
+
+    public void updateConversationMeta(String entityId, int messageCount, @Nullable ChatMessage lastMessage, @Nullable ChatMessage lastEntityMessage) {
+        setConversationMetaInternal(entityId, messageCount, lastMessage, lastEntityMessage, false);
+        revision++;
+    }
+
+    public void recordMessageAdded(String entityId, ChatMessage message, int newTotalCount) {
+        ChatMessage lastEntityMessage = message.isPlayerMessage() ? getLastEntityMessage(entityId) : message;
+        setConversationMetaInternal(entityId, newTotalCount, message, lastEntityMessage, true);
+        revision++;
+    }
+
+    private void setConversationMetaInternal(String entityId, int messageCount, @Nullable ChatMessage lastMessage,
+                                            @Nullable ChatMessage lastEntityMessage, boolean reorder) {
+        ConversationMeta meta = conversationMeta.get(entityId);
+        if (meta == null) {
+            meta = new ConversationMeta(messageCount, lastMessage, lastEntityMessage);
+        } else {
+            meta.setMessageCount(messageCount);
+            if (lastMessage != null) {
+                meta.setLastMessage(lastMessage);
+            }
+            if (lastEntityMessage != null) {
+                meta.setLastEntityMessage(lastEntityMessage);
+            }
+        }
+
+        if (reorder) {
+            conversationMeta.remove(entityId);
+        }
+        conversationMeta.put(entityId, meta);
+    }
+
+    private @Nullable ChatMessage getLastEntityMessage(String entityId) {
+        ConversationMeta meta = conversationMeta.get(entityId);
+        if (meta != null && meta.getLastEntityMessage() != null) {
+            return meta.getLastEntityMessage();
+        }
+        return findLastEntityMessage(conversations.get(entityId));
+    }
+
+    private @Nullable ChatMessage findLastEntityMessage(@Nullable List<ChatMessage> messages) {
+        if (messages == null) {
+            return null;
+        }
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage msg = messages.get(i);
+            if (!msg.isPlayerMessage()) {
+                return msg;
+            }
+        }
+        return null;
+    }
+
     public int getMessageCount(String entityId) {
+        ConversationMeta meta = conversationMeta.get(entityId);
+        if (meta != null) {
+            return meta.getMessageCount();
+        }
         List<ChatMessage> msgs = conversations.get(entityId);
         return msgs != null ? msgs.size() : 0;
+    }
+
+    public Map<String, List<ChatMessage>> getConversations() {
+        return conversations;
+    }
+
+    public @Nullable ConversationMeta getConversationMeta(String entityId) {
+        return conversationMeta.get(entityId);
     }
 
     /**
      * Gets entity IDs ordered by most recent message (reverse insertion order).
      */
     public List<String> getEntityIds() {
-        List<String> result = new ArrayList<>(conversations.keySet());
+        List<String> result = new ArrayList<>(!conversationMeta.isEmpty() ? conversationMeta.keySet() : conversations.keySet());
         Collections.reverse(result);
         return result;
     }
@@ -189,67 +310,39 @@ public class TeamData {
      * Gets display name for entity from most recent non-player message.
      */
     public @Nullable String getEntityDisplayName(String entityId) {
-        List<ChatMessage> messages = conversations.get(entityId);
-        if (messages != null) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                ChatMessage msg = messages.get(i);
-                if (!msg.isPlayerMessage()) {
-                    return msg.senderName();
-                }
-            }
-        }
-        return null;
+        ChatMessage message = getLastEntityMessage(entityId);
+        return message != null ? message.senderName() : null;
     }
 
     /**
      * Gets display name template for entity from most recent non-player message.
      */
     public @Nullable String getEntityDisplayNameTemplate(String entityId) {
-        List<ChatMessage> messages = conversations.get(entityId);
-        if (messages != null) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                ChatMessage msg = messages.get(i);
-                if (!msg.isPlayerMessage()) {
-                    return msg.senderNameTemplate();
-                }
-            }
-        }
-        return null;
+        ChatMessage message = getLastEntityMessage(entityId);
+        return message != null ? message.senderNameTemplate() : null;
     }
 
     /**
      * Gets image ID for entity from most recent non-player message.
      */
     public @Nullable String getEntityImageId(String entityId) {
-        List<ChatMessage> messages = conversations.get(entityId);
-        if (messages != null) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                ChatMessage msg = messages.get(i);
-                if (!msg.isPlayerMessage() && msg.senderImageId() != null) {
-                    return msg.senderImageId();
-                }
-            }
-        }
-        return null;
+        ChatMessage message = getLastEntityMessage(entityId);
+        return message != null ? message.senderImageId() : null;
     }
 
     /**
      * Gets subtitle for entity from most recent non-player message.
      */
     public @Nullable String getEntitySubtitle(String entityId) {
-        List<ChatMessage> messages = conversations.get(entityId);
-        if (messages != null) {
-            for (int i = messages.size() - 1; i >= 0; i--) {
-                ChatMessage msg = messages.get(i);
-                if (!msg.isPlayerMessage() && msg.senderSubtitle() != null) {
-                    return msg.senderSubtitle();
-                }
-            }
-        }
-        return null;
+        ChatMessage message = getLastEntityMessage(entityId);
+        return message != null ? message.senderSubtitle() : null;
     }
 
     public @Nullable ChatMessage getLastMessage(String entityId) {
+        ConversationMeta meta = conversationMeta.get(entityId);
+        if (meta != null && meta.getLastMessage() != null) {
+            return meta.getLastMessage();
+        }
         List<ChatMessage> messages = conversations.get(entityId);
         if (messages == null || messages.isEmpty()) {
             return null;
@@ -257,33 +350,42 @@ public class TeamData {
         return messages.get(messages.size() - 1);
     }
 
-    public boolean consumeActions(String entityId, int messageIndex) {
+    public boolean consumeActions(String entityId, UUID messageId) {
         List<ChatMessage> messages = conversations.get(entityId);
-        if (messages == null || messageIndex < 0 || messageIndex >= messages.size()) {
+        if (messages == null || messages.isEmpty()) {
             return false;
         }
-        ChatMessage original = messages.get(messageIndex);
-        if (original.actions().isEmpty()) {
-            return false;
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage original = messages.get(i);
+            if (!original.messageId().equals(messageId)) {
+                continue;
+            }
+            if (original.actions().isEmpty()) {
+                return false;
+            }
+            messages.set(i, original.withoutActions());
+            revision++;
+            return true;
         }
-        messages.set(messageIndex, original.withoutActions());
-        revision++;
-        return true;
+        return false;
     }
 
     public void clearConversation(String entityId) {
-        if (conversations.remove(entityId) != null) {
+        boolean removed = conversations.remove(entityId) != null;
+        removed = conversationMeta.remove(entityId) != null || removed;
+        if (removed) {
             revision++;
         }
     }
 
     public void clearAll() {
         conversations.clear();
+        conversationMeta.clear();
         revision++;
     }
 
     public boolean hasConversations() {
-        return !conversations.isEmpty();
+        return !conversationMeta.isEmpty() || !conversations.isEmpty();
     }
 
     // === Typing ===
@@ -395,346 +497,4 @@ public class TeamData {
         return Collections.unmodifiableMap(data);
     }
 
-    // === JSON Serialization ===
-
-    public JsonObject toJson() {
-        JsonObject json = new JsonObject();
-        json.addProperty("id", id);
-        json.addProperty("title", title);
-        json.addProperty("color", color);
-
-        JsonArray membersArray = new JsonArray();
-        for (UUID member : members) {
-            membersArray.add(member.toString());
-        }
-        json.add("members", membersArray);
-
-        JsonObject convsObject = new JsonObject();
-        for (Map.Entry<String, List<ChatMessage>> entry : conversations.entrySet()) {
-            JsonArray messagesArray = new JsonArray();
-            for (ChatMessage msg : entry.getValue()) {
-                messagesArray.add(messageToJson(msg));
-            }
-            convsObject.add(entry.getKey(), messagesArray);
-        }
-        json.add("conversations", convsObject);
-
-        JsonObject dataObject = new JsonObject();
-        for (Map.Entry<String, Object> entry : data.entrySet()) {
-            Object val = entry.getValue();
-            if (val instanceof Number n) {
-                dataObject.addProperty(entry.getKey(), n);
-            } else {
-                dataObject.addProperty(entry.getKey(), val.toString());
-            }
-        }
-        json.add("data", dataObject);
-
-        return json;
-    }
-
-    public static TeamData fromJson(JsonObject json) {
-        String id = GsonHelper.getAsString(json, "id");
-        String title = GsonHelper.getAsString(json, "title");
-        TeamData team = new TeamData(id, title);
-        team.color = GsonHelper.getAsInt(json, "color", team.color);
-
-        if (json.has("members")) {
-            JsonArray membersArray = GsonHelper.getAsJsonArray(json, "members");
-            for (JsonElement elem : membersArray) {
-                team.members.add(UUID.fromString(elem.getAsString()));
-            }
-        }
-
-        if (json.has("conversations")) {
-            JsonObject convsObject = GsonHelper.getAsJsonObject(json, "conversations");
-            for (Map.Entry<String, JsonElement> entry : convsObject.entrySet()) {
-                List<ChatMessage> messages = new ArrayList<>();
-                JsonArray messagesArray = entry.getValue().getAsJsonArray();
-                for (JsonElement elem : messagesArray) {
-                    messages.add(messageFromJson(elem.getAsJsonObject()));
-                }
-                team.conversations.put(entry.getKey(), messages);
-            }
-        }
-
-        if (json.has("data")) {
-            JsonObject dataObject = GsonHelper.getAsJsonObject(json, "data");
-            for (Map.Entry<String, JsonElement> entry : dataObject.entrySet()) {
-                JsonElement val = entry.getValue();
-                if (val.isJsonPrimitive() && val.getAsJsonPrimitive().isNumber()) {
-                    team.data.put(entry.getKey(), val.getAsDouble());
-                } else {
-                    team.data.put(entry.getKey(), val.getAsString());
-                }
-            }
-        }
-
-        return team;
-    }
-
-    // === NBT for network packets ===
-
-    public CompoundTag toNbt() {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("id", id);
-        tag.putString("title", title);
-        tag.putInt("color", color);
-        tag.putInt("revision", revision);
-
-        ListTag convList = new ListTag();
-        for (Map.Entry<String, List<ChatMessage>> entry : conversations.entrySet()) {
-            CompoundTag convTag = new CompoundTag();
-            convTag.putString("entityId", entry.getKey());
-            ListTag messageList = new ListTag();
-            for (ChatMessage msg : entry.getValue()) {
-                messageList.add(msg.toNbt());
-            }
-            convTag.put("messages", messageList);
-            convList.add(convTag);
-        }
-        tag.put("conversations", convList);
-
-        CompoundTag dataTag = new CompoundTag();
-        for (Map.Entry<String, Object> entry : data.entrySet()) {
-            Object val = entry.getValue();
-            if (val instanceof Number n) {
-                dataTag.putDouble(entry.getKey(), n.doubleValue());
-            } else {
-                dataTag.putString(entry.getKey(), val.toString());
-            }
-        }
-        tag.put("data", dataTag);
-
-        return tag;
-    }
-
-    public static TeamData fromNbt(CompoundTag tag) {
-        String id = tag.getString("id");
-        String title = tag.getString("title");
-        TeamData team = new TeamData(id, title);
-        team.color = tag.getInt("color");
-        team.revision = tag.getInt("revision");
-
-        if (tag.contains("conversations")) {
-            ListTag convList = tag.getList("conversations", Tag.TAG_COMPOUND);
-            for (int i = 0; i < convList.size(); i++) {
-                CompoundTag convTag = convList.getCompound(i);
-                String entityId = convTag.getString("entityId");
-                ListTag messageList = convTag.getList("messages", Tag.TAG_COMPOUND);
-                List<ChatMessage> messages = new ArrayList<>();
-                for (int j = 0; j < messageList.size(); j++) {
-                    messages.add(ChatMessage.fromNbt(messageList.getCompound(j)));
-                }
-                team.conversations.put(entityId, messages);
-            }
-        }
-
-        if (tag.contains("data")) {
-            CompoundTag dataTag = tag.getCompound("data");
-            for (String key : dataTag.getAllKeys()) {
-                byte type = dataTag.getTagType(key);
-                if (type == Tag.TAG_DOUBLE || type == Tag.TAG_FLOAT || type == Tag.TAG_INT || type == Tag.TAG_LONG) {
-                    team.data.put(key, dataTag.getDouble(key));
-                } else {
-                    team.data.put(key, dataTag.getString(key));
-                }
-            }
-        }
-
-        return team;
-    }
-
-    // === Helper methods for JSON message serialization ===
-
-    private static JsonObject messageToJson(ChatMessage msg) {
-        JsonObject json = new JsonObject();
-        json.addProperty("type", msg.type().name());
-        json.addProperty("messageId", msg.messageId().toString());
-        json.addProperty("entityId", msg.entityId());
-        json.addProperty("senderName", msg.senderName());
-        if (msg.senderNameTemplate() != null) {
-            json.addProperty("senderNameTemplate", msg.senderNameTemplate());
-        }
-        if (msg.senderSubtitle() != null) {
-            json.addProperty("senderSubtitle", msg.senderSubtitle());
-        }
-        if (msg.senderSubtitleTemplate() != null) {
-            json.addProperty("senderSubtitleTemplate", msg.senderSubtitleTemplate());
-        }
-        if (msg.senderImageId() != null) {
-            json.addProperty("senderImage", msg.senderImageId());
-        }
-        json.addProperty("content", msg.content());
-        if (msg.contentTemplate() != null) {
-            json.addProperty("contentTemplate", msg.contentTemplate());
-        }
-        json.addProperty("worldDay", msg.worldDay());
-        if (msg.playerUuid() != null) {
-            json.addProperty("playerUuid", msg.playerUuid().toString());
-        }
-
-        if (!msg.actions().isEmpty()) {
-            JsonArray actionsArray = new JsonArray();
-            for (ChatAction action : msg.actions()) {
-                actionsArray.add(actionToJson(action));
-            }
-            json.add("actions", actionsArray);
-        }
-
-        if (!msg.transactionInput().isEmpty()) {
-            json.add("transactionInput", actionItemsToJson(msg.transactionInput()));
-        }
-        if (!msg.transactionOutput().isEmpty()) {
-            json.add("transactionOutput", actionItemsToJson(msg.transactionOutput()));
-        }
-
-        return json;
-    }
-
-    private static ChatMessage messageFromJson(JsonObject json) {
-        // Delegate to ChatMessage's NBT since structure is similar
-        // Convert JSON to NBT-like structure
-        CompoundTag tag = new CompoundTag();
-        String typeName = GsonHelper.getAsString(json, "type", "ENTITY");
-        MessageType type;
-        try {
-            type = MessageType.valueOf(typeName);
-        } catch (IllegalArgumentException e) {
-            type = MessageType.ENTITY;
-        }
-        tag.putInt("type", type.ordinal());
-        if (json.has("messageId")) {
-            tag.putUUID("messageId", UUID.fromString(GsonHelper.getAsString(json, "messageId")));
-        }
-        tag.putString("entityId", GsonHelper.getAsString(json, "entityId", ""));
-        tag.putString("senderName", GsonHelper.getAsString(json, "senderName", ""));
-        if (json.has("senderNameTemplate")) {
-            tag.putString("senderNameTemplate", GsonHelper.getAsString(json, "senderNameTemplate"));
-        }
-        if (json.has("senderSubtitle")) {
-            tag.putString("senderSubtitle", GsonHelper.getAsString(json, "senderSubtitle"));
-        }
-        if (json.has("senderSubtitleTemplate")) {
-            tag.putString("senderSubtitleTemplate", GsonHelper.getAsString(json, "senderSubtitleTemplate"));
-        }
-        if (json.has("senderImage")) {
-            tag.putString("senderImage", GsonHelper.getAsString(json, "senderImage"));
-        }
-        tag.putString("content", GsonHelper.getAsString(json, "content", ""));
-        if (json.has("contentTemplate")) {
-            tag.putString("contentTemplate", GsonHelper.getAsString(json, "contentTemplate"));
-        }
-        tag.putLong("worldDay", GsonHelper.getAsLong(json, "worldDay", 0));
-        if (json.has("playerUuid")) {
-            tag.putUUID("playerUuid", UUID.fromString(GsonHelper.getAsString(json, "playerUuid")));
-        }
-
-        if (json.has("actions")) {
-            ListTag actionList = new ListTag();
-            JsonArray actionsArray = GsonHelper.getAsJsonArray(json, "actions");
-            for (JsonElement elem : actionsArray) {
-                actionList.add(actionFromJson(elem.getAsJsonObject()));
-            }
-            tag.put("actions", actionList);
-        }
-
-        if (json.has("transactionInput")) {
-            tag.put("transactionInput", actionItemsFromJson(GsonHelper.getAsJsonArray(json, "transactionInput")));
-        }
-        if (json.has("transactionOutput")) {
-            tag.put("transactionOutput", actionItemsFromJson(GsonHelper.getAsJsonArray(json, "transactionOutput")));
-        }
-
-        return ChatMessage.fromNbt(tag);
-    }
-
-    private static JsonObject actionToJson(ChatAction action) {
-        JsonObject json = new JsonObject();
-        json.addProperty("label", action.label());
-        if (action.labelTemplate() != null) {
-            json.addProperty("labelTemplate", action.labelTemplate());
-        }
-        JsonArray cmds = new JsonArray();
-        for (String cmd : action.commands()) {
-            cmds.add(cmd);
-        }
-        json.add("commands", cmds);
-        if (action.replyText() != null) {
-            json.addProperty("reply", action.replyText());
-        }
-        if (!action.itemsVisual().isEmpty()) {
-            json.add("itemsVisual", actionItemsToJson(action.itemsVisual()));
-        }
-        if (!action.itemsInput().isEmpty()) {
-            json.add("itemsInput", actionItemsToJson(action.itemsInput()));
-        }
-        if (!action.itemsOutput().isEmpty()) {
-            json.add("itemsOutput", actionItemsToJson(action.itemsOutput()));
-        }
-        if (action.nextState() != null) {
-            json.addProperty("nextState", action.nextState());
-        }
-        if (action.condition() != null) {
-            json.addProperty("condition", action.condition());
-        }
-        return json;
-    }
-
-    private static CompoundTag actionFromJson(JsonObject json) {
-        CompoundTag tag = new CompoundTag();
-        tag.putString("label", GsonHelper.getAsString(json, "label", ""));
-        if (json.has("labelTemplate")) {
-            tag.putString("labelTemplate", GsonHelper.getAsString(json, "labelTemplate"));
-        }
-        ListTag cmds = new ListTag();
-        if (json.has("commands")) {
-            for (JsonElement elem : GsonHelper.getAsJsonArray(json, "commands")) {
-                cmds.add(net.minecraft.nbt.StringTag.valueOf(elem.getAsString()));
-            }
-        }
-        tag.put("commands", cmds);
-        if (json.has("reply")) {
-            tag.putString("reply", GsonHelper.getAsString(json, "reply"));
-        }
-        if (json.has("itemsVisual")) {
-            tag.put("itemsVisual", actionItemsFromJson(GsonHelper.getAsJsonArray(json, "itemsVisual")));
-        }
-        if (json.has("itemsInput")) {
-            tag.put("itemsInput", actionItemsFromJson(GsonHelper.getAsJsonArray(json, "itemsInput")));
-        }
-        if (json.has("itemsOutput")) {
-            tag.put("itemsOutput", actionItemsFromJson(GsonHelper.getAsJsonArray(json, "itemsOutput")));
-        }
-        if (json.has("nextState")) {
-            tag.putString("nextState", GsonHelper.getAsString(json, "nextState"));
-        }
-        if (json.has("condition")) {
-            tag.putString("condition", GsonHelper.getAsString(json, "condition"));
-        }
-        return tag;
-    }
-
-    private static JsonArray actionItemsToJson(List<ChatAction.ActionItem> items) {
-        JsonArray arr = new JsonArray();
-        for (ChatAction.ActionItem item : items) {
-            JsonObject obj = new JsonObject();
-            obj.addProperty("item", item.item());
-            obj.addProperty("count", item.count());
-            arr.add(obj);
-        }
-        return arr;
-    }
-
-    private static ListTag actionItemsFromJson(JsonArray arr) {
-        ListTag list = new ListTag();
-        for (JsonElement elem : arr) {
-            JsonObject obj = elem.getAsJsonObject();
-            CompoundTag tag = new CompoundTag();
-            tag.putString("item", GsonHelper.getAsString(obj, "item", ""));
-            tag.putInt("count", GsonHelper.getAsInt(obj, "count", 1));
-            list.add(tag);
-        }
-        return list;
-    }
 }

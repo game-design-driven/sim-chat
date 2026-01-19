@@ -1,52 +1,56 @@
 package com.yardenzamir.simchat.team;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.yardenzamir.simchat.SimChatMod;
-import com.yardenzamir.simchat.network.NetworkHandler;
-import net.minecraft.ChatFormatting;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.saveddata.SavedData;
-import net.minecraft.world.level.storage.LevelResource;
-import net.minecraft.world.scores.PlayerTeam;
-import net.minecraft.world.scores.Scoreboard;
-import org.jetbrains.annotations.Nullable;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * World-level manager for all teams. Stores team index in SavedData,
- * individual team data in JSON files.
- */
-public class SimChatTeamManager extends SavedData {
+import net.minecraft.ChatFormatting;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.scores.Scoreboard;
 
-    private static final String DATA_NAME = "simchat_teams";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+import org.jetbrains.annotations.Nullable;
+
+import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.network.NetworkHandler;
+import com.yardenzamir.simchat.storage.SimChatDatabase;
+
+/**
+ * World-level manager for all teams. Persists team data and messages in SQLite.
+ */
+public class SimChatTeamManager {
+
+    private static final Map<MinecraftServer, SimChatTeamManager> INSTANCES = new WeakHashMap<>();
 
     private final MinecraftServer server;
+    private final SimChatDatabase database;
     private final Map<String, TeamData> teamCache = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerToTeam = new ConcurrentHashMap<>();
 
     private SimChatTeamManager(MinecraftServer server) {
         this.server = server;
+        this.database = new SimChatDatabase(server);
+        this.database.open();
+        this.playerToTeam.putAll(database.loadPlayerTeams());
     }
 
     public static SimChatTeamManager get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(
-                tag -> load(server, tag),
-                () -> new SimChatTeamManager(server),
-                DATA_NAME
-        );
+        synchronized (INSTANCES) {
+            return INSTANCES.computeIfAbsent(server, SimChatTeamManager::new);
+        }
+    }
+
+    public void shutdown() {
+        database.close();
+        synchronized (INSTANCES) {
+            INSTANCES.remove(server);
+        }
     }
 
     // === Team Operations ===
@@ -56,19 +60,17 @@ public class SimChatTeamManager extends SavedData {
      */
     public TeamData createTeam(ServerPlayer creator, String title) {
         String id = TeamData.generateId();
-        // Ensure unique ID (extremely unlikely collision but be safe)
-        while (teamCache.containsKey(id) || teamFileExists(id)) {
+        while (teamCache.containsKey(id) || database.teamExists(id)) {
             id = TeamData.generateId();
         }
 
         TeamData team = new TeamData(id, title);
         team.addMember(creator.getUUID());
 
-        // Update mappings
         String oldTeamId = playerToTeam.put(creator.getUUID(), id);
+        database.setPlayerTeam(creator.getUUID(), id);
         teamCache.put(id, team);
 
-        // Remove from old team if existed
         if (oldTeamId != null) {
             TeamData oldTeam = getTeam(oldTeamId);
             if (oldTeam != null) {
@@ -78,21 +80,17 @@ public class SimChatTeamManager extends SavedData {
         }
 
         saveTeam(team);
-        setDirty();
-
-        // Sync with vanilla scoreboard team
         addPlayerToVanillaTeam(creator, team);
-
         return team;
     }
 
     /**
-     * Gets a team by ID, loading from disk if needed.
+     * Gets a team by ID, loading from SQLite if needed.
      */
     public @Nullable TeamData getTeam(String teamId) {
         TeamData team = teamCache.get(teamId);
         if (team == null) {
-            team = loadTeam(teamId);
+            team = database.loadTeam(teamId);
             if (team != null) {
                 teamCache.put(teamId, team);
             }
@@ -114,7 +112,6 @@ public class SimChatTeamManager extends SavedData {
     public TeamData getOrCreatePlayerTeam(ServerPlayer player) {
         TeamData team = getPlayerTeam(player);
         if (team == null) {
-            // Create solo team with default name
             String defaultTitle = "Team " + TeamData.generateId().substring(0, 4).toUpperCase();
             team = createTeam(player, defaultTitle);
         }
@@ -134,7 +131,6 @@ public class SimChatTeamManager extends SavedData {
         UUID playerId = player.getUUID();
         String oldTeamId = playerToTeam.get(playerId);
 
-        // Remove from old team
         if (oldTeamId != null && !oldTeamId.equals(newTeamId)) {
             TeamData oldTeam = getTeam(oldTeamId);
             if (oldTeam != null) {
@@ -143,17 +139,13 @@ public class SimChatTeamManager extends SavedData {
             }
         }
 
-        // Add to new team
         newTeam.addMember(playerId);
         playerToTeam.put(playerId, newTeamId);
+        database.setPlayerTeam(playerId, newTeamId);
         saveTeam(newTeam);
-        setDirty();
 
-        // Sync with vanilla scoreboard team
         addPlayerToVanillaTeam(player, newTeam);
-
-        // Sync to player
-        NetworkHandler.syncTeamToPlayer(player, newTeam);
+        NetworkHandler.syncTeamWithLazyLoad(player, newTeam);
     }
 
     /**
@@ -174,24 +166,8 @@ public class SimChatTeamManager extends SavedData {
      * Gets all teams.
      */
     public Collection<TeamData> getAllTeams() {
-        // Load all teams from disk
-        Path teamsDir = getTeamsDirectory();
-        if (Files.exists(teamsDir)) {
-            try (var stream = Files.list(teamsDir)) {
-                stream.filter(p -> p.toString().endsWith(".json"))
-                        .forEach(p -> {
-                            String filename = p.getFileName().toString();
-                            String teamId = filename.substring(0, filename.length() - 5);
-                            if (!teamCache.containsKey(teamId)) {
-                                TeamData team = loadTeam(teamId);
-                                if (team != null) {
-                                    teamCache.put(teamId, team);
-                                }
-                            }
-                        });
-            } catch (IOException e) {
-                SimChatMod.LOGGER.error("Failed to list teams directory", e);
-            }
+        for (String teamId : database.loadTeamIds()) {
+            teamCache.computeIfAbsent(teamId, database::loadTeam);
         }
         return teamCache.values();
     }
@@ -199,15 +175,12 @@ public class SimChatTeamManager extends SavedData {
     /**
      * Finds a team by ID or title. Tries exact ID match first, then title match (case-insensitive).
      */
-    @Nullable
-    public TeamData findTeam(String idOrName) {
-        // Try exact ID match first
+    public @Nullable TeamData findTeam(String idOrName) {
         TeamData team = getTeam(idOrName);
         if (team != null) {
             return team;
         }
 
-        // Try title match (case-insensitive)
         for (TeamData t : getAllTeams()) {
             if (t.getTitle().equalsIgnoreCase(idOrName)) {
                 return t;
@@ -219,42 +192,8 @@ public class SimChatTeamManager extends SavedData {
 
     // === Persistence ===
 
-    private Path getTeamsDirectory() {
-        return server.getWorldPath(LevelResource.ROOT).resolve("data/simchat/teams");
-    }
-
-    private Path getTeamFile(String teamId) {
-        return getTeamsDirectory().resolve(teamId + ".json");
-    }
-
-    private boolean teamFileExists(String teamId) {
-        return Files.exists(getTeamFile(teamId));
-    }
-
     public void saveTeam(TeamData team) {
-        Path file = getTeamFile(team.getId());
-        try {
-            Files.createDirectories(file.getParent());
-            String json = GSON.toJson(team.toJson());
-            Files.writeString(file, json);
-        } catch (IOException e) {
-            SimChatMod.LOGGER.error("Failed to save team {}", team.getId(), e);
-        }
-    }
-
-    private @Nullable TeamData loadTeam(String teamId) {
-        Path file = getTeamFile(teamId);
-        if (!Files.exists(file)) {
-            return null;
-        }
-        try {
-            String json = Files.readString(file);
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            return TeamData.fromJson(obj);
-        } catch (Exception e) {
-            SimChatMod.LOGGER.error("Failed to load team {}", teamId, e);
-            return null;
-        }
+        database.upsertTeam(team);
     }
 
     public void saveAllTeams() {
@@ -263,33 +202,83 @@ public class SimChatTeamManager extends SavedData {
         }
     }
 
-    // === SavedData for player-to-team index ===
+    // === Message Operations ===
 
-    @Override
-    public CompoundTag save(CompoundTag tag) {
-        ListTag mappings = new ListTag();
-        for (Map.Entry<UUID, String> entry : playerToTeam.entrySet()) {
-            CompoundTag mapping = new CompoundTag();
-            mapping.putUUID("player", entry.getKey());
-            mapping.putString("team", entry.getValue());
-            mappings.add(mapping);
+    public int appendMessage(TeamData team, ChatMessage message) {
+        int messageIndex = database.insertMessage(team.getId(), message);
+        if (messageIndex >= 0) {
+            team.recordMessageAdded(message.entityId(), message, messageIndex + 1);
         }
-        tag.put("playerToTeam", mappings);
-        return tag;
+        return messageIndex;
     }
 
-    private static SimChatTeamManager load(MinecraftServer server, CompoundTag tag) {
-        SimChatTeamManager manager = new SimChatTeamManager(server);
-        if (tag.contains("playerToTeam")) {
-            ListTag mappings = tag.getList("playerToTeam", Tag.TAG_COMPOUND);
-            for (int i = 0; i < mappings.size(); i++) {
-                CompoundTag mapping = mappings.getCompound(i);
-                UUID playerId = mapping.getUUID("player");
-                String teamId = mapping.getString("team");
-                manager.playerToTeam.put(playerId, teamId);
+    public List<ChatMessage> loadMessages(TeamData team, String entityId, int startIndex, int count) {
+        return database.loadMessages(team.getId(), entityId, startIndex, count);
+    }
+
+    public List<ChatMessage> loadOlderMessages(TeamData team, String entityId, int beforeIndex, int count) {
+        return database.loadOlderMessages(team.getId(), entityId, beforeIndex, count);
+    }
+
+    public int getMessageCount(TeamData team, String entityId) {
+        int count = team.getMessageCount(entityId);
+        if (count == 0) {
+            return database.getMessageCount(team.getId(), entityId);
+        }
+        return count;
+    }
+
+    public @Nullable SimChatDatabase.StoredMessage getMessageById(TeamData team, UUID messageId) {
+        return database.loadMessageById(team.getId(), messageId);
+    }
+
+    public boolean consumeActions(TeamData team, UUID messageId) {
+        SimChatDatabase.StoredMessage stored = database.loadMessageById(team.getId(), messageId);
+        if (stored == null) {
+            return false;
+        }
+
+        ChatMessage message = stored.message();
+        if (message.actions().isEmpty()) {
+            return false;
+        }
+
+        ChatMessage updated = message.withoutActions();
+        database.updateMessagePayload(team.getId(), stored.entityId(), stored.messageIndex(), updated);
+
+        TeamData.ConversationMeta meta = team.getConversationMeta(stored.entityId());
+        if (meta != null) {
+            ChatMessage lastMessage = meta.getLastMessage();
+            ChatMessage lastEntityMessage = meta.getLastEntityMessage();
+            boolean updatedLastMessage = lastMessage != null && lastMessage.messageId().equals(messageId);
+            boolean updatedLastEntity = lastEntityMessage != null && lastEntityMessage.messageId().equals(messageId);
+
+            if (updatedLastMessage || updatedLastEntity) {
+                ChatMessage nextLastMessage = updatedLastMessage ? updated : lastMessage;
+                ChatMessage nextLastEntity = updatedLastEntity ? updated : lastEntityMessage;
+                team.updateConversationMeta(stored.entityId(), meta.getMessageCount(), nextLastMessage, nextLastEntity);
             }
         }
-        return manager;
+
+        int lastIndex = team.getMessageCount(stored.entityId()) - 1;
+        if (stored.messageIndex() == lastIndex) {
+            database.updateConversationLastMessage(team.getId(), stored.entityId(), stored.messageIndex(), updated);
+        }
+        if (!message.isPlayerMessage()) {
+            database.updateLastEntityMessageIfMatch(team.getId(), stored.entityId(), updated);
+        }
+
+        return true;
+    }
+
+    public void clearConversation(TeamData team, String entityId) {
+        database.clearConversation(team.getId(), entityId);
+        team.clearConversation(entityId);
+    }
+
+    public void clearAllConversations(TeamData team) {
+        database.clearAllConversations(team.getId());
+        team.clearAll();
     }
 
     // === Vanilla Team Sync ===
@@ -330,7 +319,6 @@ public class SimChatTeamManager extends SavedData {
             vanillaTeam = scoreboard.addPlayerTeam(vanillaName);
         }
 
-        // Update color based on team color
         int colorIndex = Math.max(0, Math.min(15, team.getColor()));
         vanillaTeam.setColor(COLOR_MAP[colorIndex]);
 

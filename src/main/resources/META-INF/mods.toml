@@ -31,3 +31,10 @@ Features:
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="sqlite_jdbc"
+    mandatory=true
+    versionRange="[3.51.0.0,)"
+    ordering="NONE"
+    side="BOTH"

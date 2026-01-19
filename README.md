@@ -16,6 +16,10 @@ A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogu
 - **Team data storage**: Store values, states, and scores per-team
 - **KubeJS integration**: Register custom callbacks for conditions and templates
 
+## Dependencies
+
+- Requires the `sqlite_jdbc` library mod (`minecraft-sqlite-jdbc`) on both client and server
+
 ## Commands
 
 ### Basic Commands

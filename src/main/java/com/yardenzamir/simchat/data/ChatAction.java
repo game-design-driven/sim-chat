@@ -12,6 +12,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.item.ItemStack;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -96,6 +97,26 @@ public record ChatAction(
                     tag.getBoolean(TAG_SAVE_AS_DATA)
             );
         }
+
+        public JsonObject toJson() {
+            JsonObject json = new JsonObject();
+            json.addProperty("id", id);
+            json.addProperty("maxLength", maxLength);
+            if (pattern != null) json.addProperty("pattern", pattern);
+            if (error != null) json.addProperty("error", error);
+            json.addProperty("saveAsData", saveAsData);
+            return json;
+        }
+
+        public static PlayerInputConfig fromJson(JsonObject json) {
+            return new PlayerInputConfig(
+                    GsonHelper.getAsString(json, "id"),
+                    GsonHelper.getAsInt(json, "maxLength", DEFAULT_MAX_LENGTH),
+                    json.has("pattern") ? GsonHelper.getAsString(json, "pattern") : null,
+                    json.has("error") ? GsonHelper.getAsString(json, "error") : null,
+                    GsonHelper.getAsBoolean(json, "saveAsData", false)
+            );
+        }
     }
 
     private static final String TAG_LABEL = "label";
@@ -126,6 +147,13 @@ public record ChatAction(
 
         public static ActionItem fromNbt(CompoundTag tag) {
             return new ActionItem(tag.getString(TAG_ITEM), tag.getInt(TAG_ITEM_COUNT));
+        }
+
+        public JsonObject toJson() {
+            JsonObject json = new JsonObject();
+            json.addProperty("id", item);
+            json.addProperty("count", count);
+            return json;
         }
 
         public static ActionItem fromJson(JsonObject json) {
@@ -234,6 +262,66 @@ public record ChatAction(
         List<ActionItem> itemsOutput = itemListFromNbt(tag, TAG_ITEMS_OUTPUT);
 
         return new ChatAction(label, labelTemplate, commands, replyText, itemsVisual, itemsInput, itemsOutput, nextState, condition, playerInput);
+    }
+
+    public JsonObject toJson() {
+        JsonObject json = new JsonObject();
+        json.addProperty("label", label);
+        if (labelTemplate != null) json.addProperty("labelTemplate", labelTemplate);
+
+        JsonArray cmds = new JsonArray();
+        for (String cmd : commands) cmds.add(cmd);
+        json.add("commands", cmds);
+
+        if (replyText != null) json.addProperty("reply", replyText);
+        if (!itemsVisual.isEmpty()) json.add("itemsVisual", itemListToJson(itemsVisual));
+        if (!itemsInput.isEmpty()) json.add("itemsInput", itemListToJson(itemsInput));
+        if (!itemsOutput.isEmpty()) json.add("itemsOutput", itemListToJson(itemsOutput));
+        if (nextState != null) json.addProperty("nextState", nextState);
+        if (condition != null) json.addProperty("condition", condition);
+        if (playerInput != null) json.add("playerInput", playerInput.toJson());
+        return json;
+    }
+
+    private static JsonArray itemListToJson(List<ActionItem> items) {
+        JsonArray arr = new JsonArray();
+        for (ActionItem item : items) arr.add(item.toJson());
+        return arr;
+    }
+
+    private static List<ActionItem> itemListFromJson(JsonObject json, String key) {
+        List<ActionItem> items = new ArrayList<>();
+        if (json.has(key)) {
+            for (var el : GsonHelper.getAsJsonArray(json, key)) {
+                items.add(ActionItem.fromJson(el.getAsJsonObject()));
+            }
+        }
+        return items;
+    }
+
+    public static ChatAction fromJson(JsonObject json) {
+        String label = GsonHelper.getAsString(json, "label");
+        String labelTemplate = json.has("labelTemplate") ? GsonHelper.getAsString(json, "labelTemplate") : null;
+
+        List<String> commands = new ArrayList<>();
+        if (json.has("commands")) {
+            for (var el : GsonHelper.getAsJsonArray(json, "commands")) {
+                commands.add(el.getAsString());
+            }
+        }
+
+        String replyText = json.has("reply") ? GsonHelper.getAsString(json, "reply") : null;
+        String nextState = json.has("nextState") ? GsonHelper.getAsString(json, "nextState") : null;
+        String condition = json.has("condition") ? GsonHelper.getAsString(json, "condition") : null;
+        PlayerInputConfig playerInput = json.has("playerInput")
+                ? PlayerInputConfig.fromJson(GsonHelper.getAsJsonObject(json, "playerInput"))
+                : null;
+
+        return new ChatAction(label, labelTemplate, commands, replyText,
+                itemListFromJson(json, "itemsVisual"),
+                itemListFromJson(json, "itemsInput"),
+                itemListFromJson(json, "itemsOutput"),
+                nextState, condition, playerInput);
     }
 
     /**

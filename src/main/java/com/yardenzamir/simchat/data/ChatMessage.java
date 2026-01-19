@@ -8,6 +8,10 @@ import java.util.UUID;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.util.GsonHelper;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -203,13 +207,6 @@ public final class ChatMessage {
         return worldDay;
     }
 
-    /**
-     * Legacy: returns worldDay for sorting compatibility.
-     */
-    public long timestamp() {
-        return worldDay;
-    }
-
     public List<ChatAction> actions() {
         return actions;
     }
@@ -337,6 +334,74 @@ public final class ChatMessage {
                 transactionInput,
                 transactionOutput,
                 playerUuid
+        );
+    }
+
+    public JsonObject toJson() {
+        JsonObject json = new JsonObject();
+        json.addProperty(TAG_TYPE, type.ordinal());
+        json.addProperty(TAG_MESSAGE_ID, messageId.toString());
+        json.addProperty(TAG_ENTITY_ID, entityId);
+        json.addProperty(TAG_SENDER_NAME, senderName);
+        if (senderNameTemplate != null) json.addProperty(TAG_SENDER_NAME_TEMPLATE, senderNameTemplate);
+        if (senderSubtitle != null) json.addProperty(TAG_SENDER_SUBTITLE, senderSubtitle);
+        if (senderSubtitleTemplate != null) json.addProperty(TAG_SENDER_SUBTITLE_TEMPLATE, senderSubtitleTemplate);
+        if (senderImageId != null) json.addProperty(TAG_SENDER_IMAGE, senderImageId);
+        json.addProperty(TAG_CONTENT, content);
+        if (contentTemplate != null) json.addProperty(TAG_CONTENT_TEMPLATE, contentTemplate);
+        json.addProperty(TAG_WORLD_DAY, worldDay);
+
+        if (!actions.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (ChatAction action : actions) arr.add(action.toJson());
+            json.add(TAG_ACTIONS, arr);
+        }
+        if (!transactionInput.isEmpty()) json.add(TAG_TRANSACTION_INPUT, itemListToJson(transactionInput));
+        if (!transactionOutput.isEmpty()) json.add(TAG_TRANSACTION_OUTPUT, itemListToJson(transactionOutput));
+        if (playerUuid != null) json.addProperty(TAG_PLAYER_UUID, playerUuid.toString());
+        return json;
+    }
+
+    private static JsonArray itemListToJson(List<ChatAction.ActionItem> items) {
+        JsonArray arr = new JsonArray();
+        for (ChatAction.ActionItem item : items) arr.add(item.toJson());
+        return arr;
+    }
+
+    private static List<ChatAction.ActionItem> itemListFromJson(JsonObject json, String key) {
+        List<ChatAction.ActionItem> items = new ArrayList<>();
+        if (json.has(key)) {
+            for (var el : GsonHelper.getAsJsonArray(json, key)) {
+                items.add(ChatAction.ActionItem.fromJson(el.getAsJsonObject()));
+            }
+        }
+        return items;
+    }
+
+    public static ChatMessage fromJson(JsonObject json) {
+        List<ChatAction> actions = new ArrayList<>();
+        if (json.has(TAG_ACTIONS)) {
+            for (var el : GsonHelper.getAsJsonArray(json, TAG_ACTIONS)) {
+                actions.add(ChatAction.fromJson(el.getAsJsonObject()));
+            }
+        }
+
+        return new ChatMessage(
+                MessageType.fromOrdinal(GsonHelper.getAsInt(json, TAG_TYPE)),
+                UUID.fromString(GsonHelper.getAsString(json, TAG_MESSAGE_ID)),
+                GsonHelper.getAsString(json, TAG_ENTITY_ID),
+                GsonHelper.getAsString(json, TAG_SENDER_NAME),
+                json.has(TAG_SENDER_NAME_TEMPLATE) ? GsonHelper.getAsString(json, TAG_SENDER_NAME_TEMPLATE) : null,
+                json.has(TAG_SENDER_SUBTITLE) ? GsonHelper.getAsString(json, TAG_SENDER_SUBTITLE) : null,
+                json.has(TAG_SENDER_SUBTITLE_TEMPLATE) ? GsonHelper.getAsString(json, TAG_SENDER_SUBTITLE_TEMPLATE) : null,
+                json.has(TAG_SENDER_IMAGE) ? GsonHelper.getAsString(json, TAG_SENDER_IMAGE) : null,
+                GsonHelper.getAsString(json, TAG_CONTENT),
+                json.has(TAG_CONTENT_TEMPLATE) ? GsonHelper.getAsString(json, TAG_CONTENT_TEMPLATE) : null,
+                GsonHelper.getAsLong(json, TAG_WORLD_DAY, 0),
+                actions,
+                itemListFromJson(json, TAG_TRANSACTION_INPUT),
+                itemListFromJson(json, TAG_TRANSACTION_OUTPUT),
+                json.has(TAG_PLAYER_UUID) ? UUID.fromString(GsonHelper.getAsString(json, TAG_PLAYER_UUID)) : null
         );
     }
 }

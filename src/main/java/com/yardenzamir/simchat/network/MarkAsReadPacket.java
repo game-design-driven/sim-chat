@@ -1,13 +1,14 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.capability.ChatCapability;
-import com.yardenzamir.simchat.team.SimChatTeamManager;
-import com.yardenzamir.simchat.team.TeamData;
+import java.util.function.Supplier;
+
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.function.Supplier;
+import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.team.SimChatTeamManager;
+import com.yardenzamir.simchat.team.TeamData;
 
 /**
  * Sent from client to server when player views a conversation.
@@ -38,7 +39,7 @@ public class MarkAsReadPacket {
             TeamData team = manager.getPlayerTeam(player);
             if (team == null) return;
 
-            int messageCount = team.getMessageCount(packet.entityId);
+            int messageCount = manager.getMessageCount(team, packet.entityId);
 
             ChatCapability.get(player).ifPresent(data -> {
                 data.markAsRead(packet.entityId, messageCount);

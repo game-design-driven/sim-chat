@@ -31,9 +31,9 @@ public class ChatToast implements Toast {
     private long firstRender = -1;
 
     public ChatToast(ChatMessage message, String keybindName, boolean showKeybindHint) {
-        RuntimeTemplateResolver.preloadMessage(message);
-        this.senderName = RuntimeTemplateResolver.resolveSenderName(message);
-        this.messagePreview = truncateMessage(RuntimeTemplateResolver.resolveContent(message), 100);
+        RuntimeTemplateResolver.preloadMessage(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
+        this.senderName = RuntimeTemplateResolver.resolveSenderName(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
+        this.messagePreview = truncateMessage(RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH), 100);
         this.iconTexture = AvatarManager.getTexture(message.senderImageId());
         this.keybindHint = "[" + keybindName + "]";
         this.showKeybindHint = showKeybindHint;

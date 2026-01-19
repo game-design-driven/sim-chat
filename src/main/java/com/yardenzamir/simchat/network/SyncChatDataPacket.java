@@ -1,7 +1,7 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.capability.ChatCapability;
-import com.yardenzamir.simchat.data.PlayerChatData;
+import java.util.function.Supplier;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -9,11 +9,12 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.function.Supplier;
+import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.data.PlayerChatData;
 
 /**
  * Syncs per-player read receipt data from server to client.
- * Conversation data is synced via SyncTeamDataPacket.
+ * Conversation data is synced via SyncTeamMetadataPacket and SyncMessagesPacket.
  */
 public class SyncChatDataPacket {
 

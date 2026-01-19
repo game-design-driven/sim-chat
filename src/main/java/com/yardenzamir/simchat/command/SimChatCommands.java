@@ -223,9 +223,13 @@ public class SimChatCommands {
         CallbackContext callbackCtx = new CallbackContext(player, team, entityId);
         TemplateEngine.TemplateCompilation compilation = TemplateEngine.compile(messageText, callbackCtx);
         ChatMessage message = ChatMessage.systemMessage(entityId, compilation.compiledText(), compilation.runtimeTemplate(), worldDay);
-        team.addMessage(message);
+        int messageIndex = manager.appendMessage(team, message);
+        if (messageIndex < 0) {
+            return 0;
+        }
         manager.saveTeam(team);
-        NetworkHandler.syncTeamToAllMembers(team, player.server);
+        int totalCount = manager.getMessageCount(team, entityId);
+        NetworkHandler.sendMessageToTeam(team, message, messageIndex, totalCount, player.server, true);
 
         return 1;
     }
@@ -240,7 +244,7 @@ public class SimChatCommands {
             return 0;
         }
 
-        team.clearAll();
+        manager.clearAllConversations(team);
         manager.saveTeam(team);
         NetworkHandler.syncTeamToAllMembers(team, player.server);
 
@@ -266,7 +270,7 @@ public class SimChatCommands {
             return 0;
         }
 
-        team.clearConversation(entityId);
+        manager.clearConversation(team, entityId);
         manager.saveTeam(team);
         NetworkHandler.syncTeamToAllMembers(team, player.server);
 
@@ -303,7 +307,7 @@ public class SimChatCommands {
         SimChatTeamManager manager = SimChatTeamManager.get(player.server);
         TeamData team = manager.createTeam(player, title);
 
-        NetworkHandler.syncTeamToPlayer(player, team);
+        NetworkHandler.syncTeamWithLazyLoad(player, team);
 
         ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.created", title, team.getId()), false);
         return 1;

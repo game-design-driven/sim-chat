@@ -1,12 +1,7 @@
 package com.yardenzamir.simchat.network;
 
-import com.yardenzamir.simchat.client.ChatToast;
-import com.yardenzamir.simchat.client.ClientSetup;
-import com.yardenzamir.simchat.client.ClientTeamCache;
-import com.yardenzamir.simchat.client.screen.ChatScreen;
-import com.yardenzamir.simchat.config.ClientConfig;
-import com.yardenzamir.simchat.data.ChatMessage;
-import com.yardenzamir.simchat.team.TeamData;
+import java.util.function.Supplier;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -18,11 +13,17 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
-import java.util.function.Supplier;
+import com.yardenzamir.simchat.client.ChatToast;
+import com.yardenzamir.simchat.client.ClientSetup;
+import com.yardenzamir.simchat.client.ClientTeamCache;
+import com.yardenzamir.simchat.client.screen.ChatScreen;
+import com.yardenzamir.simchat.config.ClientConfig;
+import com.yardenzamir.simchat.data.ChatMessage;
+import com.yardenzamir.simchat.team.TeamData;
 
 /**
  * Sends a new message notification from server to client.
- * Message data is synced via SyncTeamDataPacket; this is for sound/toast.
+ * Message data is synced via SyncMessagesPacket; this is for sound/toast.
  */
 public class NewMessagePacket {
 

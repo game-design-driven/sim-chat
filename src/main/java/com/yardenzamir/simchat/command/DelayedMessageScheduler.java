@@ -75,14 +75,14 @@ public class DelayedMessageScheduler {
         NetworkHandler.sendTypingToTeam(team, message.entityId(), false, server);
 
         // Add message to team data
-        team.addMessage(message);
+        int messageIndex = manager.appendMessage(team, message);
+        if (messageIndex < 0) {
+            return;
+        }
         manager.saveTeam(team);
 
-        // Sync to all online team members
-        NetworkHandler.syncTeamToAllMembers(team, server);
-
-        // Send toast notification to all online members
-        NetworkHandler.sendMessageToTeam(team, message, server, true);
+        int totalCount = manager.getMessageCount(team, message.entityId());
+        NetworkHandler.sendMessageToTeam(team, message, messageIndex, totalCount, server, true);
     }
 
     private static class PendingMessage {

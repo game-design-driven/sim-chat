@@ -15,10 +15,20 @@ A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogu
 - **Custom avatars**: Load PNG images from config folder for sender portraits
 - **Team data storage**: Store values, states, and scores per-team
 - **KubeJS integration**: Register custom callbacks for conditions and templates
+- **SQLite storage**: Persistent message history with lazy loading for large conversations
+- **Scalable**: Handles 100k+ messages with smooth scrolling and instant UI response
 
 ## Dependencies
 
 - Requires the `sqlite_jdbc` library mod (`minecraft-sqlite-jdbc`) on both client and server
+
+## Storage
+
+Conversation history is stored in a SQLite database at `<world>/data/simchat/simchat.db`. This provides:
+
+- **Scalability**: Handles 100k+ messages efficiently with lazy loading
+- **Persistence**: Data survives server restarts and world reloads
+- **Inspectability**: Messages stored as human-readable JSON (viewable in any SQLite browser)
 
 ## Commands
 
@@ -317,15 +327,20 @@ All entity files hot-reload when modified.
 | `toastDuration` | `5.0` | Toast display time (seconds) |
 | `sidebarWidth` | `240` | Conversation list width |
 | `sidebarSortMode` | `0` | Sort: 0=recent, 1=alphabetical |
+| `lazyLoadBatchSize` | `30` | Messages to request when scrolling up |
+| `lazyLoadThreshold` | `100` | Pixels from top before loading older messages |
+| `closedCacheSize` | `400` | Messages to keep cached per conversation when chat closes |
 
-### Server Config (`simchat-common.toml`)
+### Common Config (`simchat-common.toml`)
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `minDelay` | `0.3` | Minimum typing delay (seconds) |
 | `maxDelay` | `3.0` | Maximum typing delay (seconds) |
 | `charsPerSecond` | `100.0` | Simulated typing speed |
-| `commandPermissionLevel` | `2` | Permission for /simchat commands |
+| `commandPermissionLevel` | `4` | Permission for /simchat commands |
+| `initialMessageCount` | `30` | Messages per conversation on initial sync |
+| `maxLazyLoadBatchSize` | `100` | Server-side cap for lazy load requests |
 
 ## Keybinds
 

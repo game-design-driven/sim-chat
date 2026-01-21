@@ -3,6 +3,7 @@ package com.yardenzamir.simchat.client.screen;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -11,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 import com.yardenzamir.simchat.capability.ChatCapability;
+import com.yardenzamir.simchat.client.ChatToast;
 import com.yardenzamir.simchat.client.ClientTeamCache;
 import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
 import com.yardenzamir.simchat.client.SortMode;
@@ -37,6 +39,9 @@ public class ChatScreen extends Screen {
     private static final int HEADER_BUTTON_PADDING = 6;
 
     private @Nullable String selectedEntityId;
+    private final @Nullable String initialEntityId;
+    private final @Nullable UUID initialMessageId;
+    private final int initialMessageIndex;
     private EntityListWidget entityList;
     private ChatHistoryWidget chatHistory;
     private @Nullable String lastTeamId;
@@ -50,9 +55,19 @@ public class ChatScreen extends Screen {
 
     private SortMode sortMode;
 
-    public ChatScreen(@Nullable String initialEntityId) {
+    public ChatScreen(@Nullable String initialEntityId, @Nullable UUID initialMessageId, int initialMessageIndex) {
         super(Component.literal("SimChat"));
-        this.selectedEntityId = initialEntityId;
+        this.initialEntityId = normalizeEntityId(initialEntityId);
+        this.initialMessageId = initialMessageId;
+        this.initialMessageIndex = initialMessageIndex;
+        this.selectedEntityId = this.initialEntityId;
+    }
+
+    private static @Nullable String normalizeEntityId(@Nullable String entityId) {
+        if (entityId == null || entityId.isEmpty()) {
+            return null;
+        }
+        return entityId;
     }
 
     @Override
@@ -67,10 +82,31 @@ public class ChatScreen extends Screen {
         RuntimeTemplateResolver.clear();
         refreshAll();
 
+        boolean toastActive = ChatToast.isToastActive() && initialMessageId == null;
+        PlayerChatData readData = minecraft != null && minecraft.player != null
+                ? ChatCapability.getOrThrow(minecraft.player)
+                : null;
+
+        PlayerChatData.FocusInfo focusInfo = null;
+        if (!toastActive && selectedEntityId == null && readData != null) {
+            String lastFocused = readData.getLastFocusedEntityId();
+            if (!lastFocused.isEmpty()) {
+                selectedEntityId = lastFocused;
+            }
+        }
+
+        if (!toastActive && readData != null && selectedEntityId != null) {
+            if (initialMessageId != null) {
+                focusInfo = new PlayerChatData.FocusInfo(selectedEntityId, initialMessageId, initialMessageIndex);
+            } else {
+                focusInfo = readData.getFocusedMessage(selectedEntityId);
+            }
+        }
+
         if (selectedEntityId != null && !selectedEntityId.isEmpty()) {
-            selectEntity(selectedEntityId);
+            selectEntity(selectedEntityId, focusInfo, toastActive);
         } else {
-            selectFirstEntity();
+            selectFirstEntity(toastActive);
         }
     }
 
@@ -199,21 +235,21 @@ public class ChatScreen extends Screen {
         return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
-    private void selectFirstEntity() {
+    private void selectFirstEntity(boolean forceLatest) {
         TeamData team = ClientTeamCache.getTeam();
         if (team == null) return;
 
         List<String> entityIds = team.getEntityIds();
         if (!entityIds.isEmpty()) {
-            selectEntity(entityIds.get(0));
+            selectEntity(entityIds.get(0), null, forceLatest);
         }
     }
 
     private void onEntitySelected(String entityId) {
-        selectEntity(entityId);
+        selectEntity(entityId, null, false);
     }
 
-    private void selectEntity(String entityId) {
+    private void selectEntity(String entityId, @Nullable PlayerChatData.FocusInfo focusInfo, boolean forceLatest) {
         this.selectedEntityId = entityId;
         entityList.setSelected(entityId);
 
@@ -234,6 +270,17 @@ public class ChatScreen extends Screen {
                 team.getEntityDisplayNameTemplate(entityId),
                 team.getEntityImageId(entityId)
         );
+
+        if (focusInfo != null && !forceLatest) {
+            chatHistory.setFocusedMessage(focusInfo.messageId(), focusInfo.messageIndex(), true);
+            int loadedIndex = ClientTeamCache.getMessageIndex(entityId, focusInfo.messageId());
+            if (loadedIndex < 0) {
+                int batchSize = ClientConfig.LAZY_LOAD_BATCH_SIZE.get();
+                NetworkHandler.requestOlderMessages(entityId, focusInfo.messageIndex() + 1, batchSize);
+            }
+        } else {
+            chatHistory.clearFocusedMessage();
+        }
 
         // Mark as read
         readData.markAsRead(entityId, totalMessages);
@@ -294,7 +341,7 @@ public class ChatScreen extends Screen {
         int dividerColor = (hoveringDivider || draggingDivider) ? 0xFF6060a0 : 0xFF3d3d5c;
         graphics.fill(sidebarWidth - 1, 0, sidebarWidth + 1, height, dividerColor);
 
-        graphics.fill(sidebarWidth, 0, width, height, 0xDD12121f);
+        graphics.fill(sidebarWidth, 0, width, height, ClientConfig.getChatBackgroundColor());
 
         // Header with selected entity name
         TeamData team = ClientTeamCache.getTeam();
@@ -363,6 +410,10 @@ public class ChatScreen extends Screen {
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);
+
+        if (chatHistory != null) {
+            chatHistory.renderContextMenuOverlay(graphics);
+        }
     }
 
     @Override
@@ -474,7 +525,7 @@ public class ChatScreen extends Screen {
             entityList.setEntities(team, readData, entityIds);
 
             if (teamChanged && !entityIds.isEmpty()) {
-                selectEntity(entityIds.get(0));
+                selectEntity(entityIds.get(0), null, true);
             } else {
                 refreshChatHistory();
             }

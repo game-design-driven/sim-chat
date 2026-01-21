@@ -48,6 +48,16 @@ public final class ChatHistoryConstants {
     public static final int BORDER_DISABLED_COLOR = 0xFF606060;
     public static final int BORDER_HOVER_COLOR = 0xFF6080C0;
     public static final int BORDER_DEFAULT_COLOR = 0xFF405090;
+    public static final int FOCUS_BORDER_COLOR = 0xFF6FA8FF;
+    public static final int FOCUS_BORDER_PADDING = MESSAGE_PADDING / 2;
+
+    // Context menu
+    public static final int CONTEXT_MENU_PADDING = 6;
+    public static final int CONTEXT_MENU_ITEM_HEIGHT = 18;
+    public static final int CONTEXT_MENU_BG_COLOR = 0xFF202030;
+    public static final int CONTEXT_MENU_BORDER_COLOR = 0xFF505070;
+    public static final int CONTEXT_MENU_TEXT_COLOR = 0xFFE0E0E0;
+    public static final int CONTEXT_MENU_HIGHLIGHT_COLOR = 0x2A405070;
 
     // Color manipulation
     public static final int BRIGHTEN_AMOUNT = 40;

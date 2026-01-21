@@ -15,6 +15,7 @@ import net.minecraft.network.chat.Component;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.yardenzamir.simchat.capability.ChatCapability;
 import com.yardenzamir.simchat.client.ClientTeamCache;
 import com.yardenzamir.simchat.client.ClientTemplateEngine;
 import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
@@ -59,6 +60,14 @@ public class ChatHistoryWidget extends AbstractWidget {
     private int dragStartY = 0;
     private int dragStartScrollOffset = 0;
 
+    // Focused message state
+    private @Nullable UUID focusedMessageId;
+    private int focusedMessageIndex = -1;
+    private boolean pendingFocusScroll = false;
+
+    // Context menu state
+    private @Nullable ContextMenu contextMenu;
+
     /**
      * Tracks the state of an active text input field.
      */
@@ -82,12 +91,22 @@ public class ChatHistoryWidget extends AbstractWidget {
                 try {
                     pattern = Pattern.compile(config.pattern());
                 } catch (PatternSyntaxException ignored) {
-                    // Invalid pattern - will always fail validation
+                    // Invalid regex in config, treat as no validation
                 }
             }
             return new ActiveInputState(messageIndex, messageId, actionIndex, new StringBuilder(), config, pattern);
         }
     }
+
+    private static final String CONTEXT_MENU_SHARE = "Share to team chat";
+    private static final String CONTEXT_MENU_COPY = "Copy message";
+
+    private record ContextMenu(UUID messageId, int messageIndex, int x, int y) {}
+
+    private record ContextMenuLayout(int x, int y, int width, int height, int itemHeight) {}
+
+    private record MessageHit(int index, ChatMessage message, int y, int height) {}
+
 
     public ChatHistoryWidget(Minecraft minecraft, int width, int height, int x, int y) {
         super(x, y, width, height, Component.empty());
@@ -103,6 +122,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.messages.addAll(messages);
         this.entityId = entityId;
         this.requestingOlderMessages = false;
+        this.contextMenu = null;
 
         // Preload all messages for template resolution
         RuntimeTemplateResolver.preloadMessages(this.messages, RuntimeTemplateResolver.ResolutionPriority.HIGH);
@@ -138,6 +158,7 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.messages.clear();
         this.messages.addAll(messages);
         this.entityId = entityId;
+        this.contextMenu = null;
 
         // Preload new messages for template resolution
         if (messages.size() > oldCount) {
@@ -162,6 +183,47 @@ public class ChatHistoryWidget extends AbstractWidget {
             // Same or fewer messages - maintain scroll position
             this.scrollOffset = clampScrollOffset(oldScrollOffset);
         }
+
+        if (pendingFocusScroll && focusedMessageId != null) {
+            pendingFocusScroll = !scrollToMessage(focusedMessageId);
+        }
+    }
+
+    public void setFocusedMessage(@Nullable UUID messageId, int messageIndex, boolean scrollToMessage) {
+        this.focusedMessageId = messageId;
+        this.focusedMessageIndex = messageId != null ? messageIndex : -1;
+        this.pendingFocusScroll = false;
+        if (scrollToMessage && messageId != null) {
+            this.pendingFocusScroll = !scrollToMessage(messageId);
+        }
+    }
+
+    public void clearFocusedMessage() {
+        this.focusedMessageId = null;
+        this.focusedMessageIndex = -1;
+        this.pendingFocusScroll = false;
+    }
+
+    public @Nullable UUID getFocusedMessageId() {
+        return focusedMessageId;
+    }
+
+    public int getFocusedMessageIndex() {
+        return focusedMessageIndex;
+    }
+
+    private boolean scrollToMessage(UUID messageId) {
+        int y = getY() + MESSAGE_PADDING;
+        for (ChatMessage message : messages) {
+            int msgHeight = MessageRenderer.calculateHeight(minecraft, message, width);
+            if (message.messageId().equals(messageId)) {
+                int desiredOffset = y - getY() - MESSAGE_PADDING;
+                scrollOffset = clampScrollOffset(desiredOffset);
+                return true;
+            }
+            y += msgHeight + MESSAGE_PADDING;
+        }
+        return false;
     }
 
     public void clearMessages() {
@@ -174,6 +236,9 @@ public class ChatHistoryWidget extends AbstractWidget {
         this.contentHeight = 0;
         this.activeInput = null;
         this.requestingOlderMessages = false;
+        this.focusedMessageId = null;
+        this.focusedMessageIndex = -1;
+        this.contextMenu = null;
     }
 
     public void setTyping(boolean typing, @Nullable String entityName, @Nullable String nameTemplate, @Nullable String imageId) {
@@ -197,20 +262,6 @@ public class ChatHistoryWidget extends AbstractWidget {
             return entityName;
         }
         return resolved;
-    }
-
-    private void scrollToMessage(int messageIndex) {
-        if (messageIndex < 0 || messageIndex >= messages.size()) {
-            scrollToBottom();
-            return;
-        }
-
-        int y = MESSAGE_PADDING;
-        for (int i = 0; i < messageIndex; i++) {
-            y += MessageRenderer.calculateHeight(minecraft, messages.get(i), width) + MESSAGE_PADDING;
-        }
-
-        scrollOffset = clampScrollOffset(y - height / 4);
     }
 
     private void scrollToBottom() {
@@ -324,6 +375,23 @@ public class ChatHistoryWidget extends AbstractWidget {
             }
 
             if (y + msgHeight > getY() && y < getY() + height) {
+                int displayHeight = Math.max(1, msgHeight - MESSAGE_PADDING);
+                int focusPadding = FOCUS_BORDER_PADDING;
+                int focusTop = y - focusPadding;
+                int focusBottom = y + displayHeight + focusPadding;
+                int clampedTop = Math.max(getY(), focusTop);
+                int clampedBottom = Math.min(getY() + height, focusBottom);
+                int focusHeight = Math.max(1, clampedBottom - clampedTop);
+
+                if (contextMenu != null && contextMenu.messageId().equals(message.messageId())) {
+                    graphics.fill(getX(), clampedTop, getX() + width, clampedTop + focusHeight, CONTEXT_MENU_HIGHLIGHT_COLOR);
+                }
+
+                boolean isFocused = focusedMessageId != null && focusedMessageId.equals(message.messageId());
+                if (isFocused) {
+                    graphics.renderOutline(getX(), clampedTop, width, focusHeight, FOCUS_BORDER_COLOR);
+                }
+
                 // Build active input info if this message has the active input
                 MessageRenderer.ActiveInputInfo inputInfo = null;
                 if (activeInput != null && activeInput.messageIndex() == i) {
@@ -403,10 +471,134 @@ public class ChatHistoryWidget extends AbstractWidget {
         }
     }
 
+    public void renderContextMenuOverlay(GuiGraphics graphics) {
+        ContextMenuLayout layout = getContextMenuLayout();
+        if (layout == null) {
+            return;
+        }
+
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, 0, 200);
+
+        int x = layout.x();
+        int y = layout.y();
+        int width = layout.width();
+        int height = layout.height();
+        int itemHeight = layout.itemHeight();
+
+        graphics.fill(x, y, x + width, y + height, CONTEXT_MENU_BG_COLOR);
+        graphics.renderOutline(x, y, width, height, CONTEXT_MENU_BORDER_COLOR);
+
+        int textX = x + CONTEXT_MENU_PADDING;
+        int textY = y + CONTEXT_MENU_PADDING + (itemHeight - minecraft.font.lineHeight) / 2;
+        graphics.drawString(minecraft.font, CONTEXT_MENU_SHARE, textX, textY, CONTEXT_MENU_TEXT_COLOR);
+        graphics.drawString(minecraft.font, CONTEXT_MENU_COPY, textX, textY + itemHeight, CONTEXT_MENU_TEXT_COLOR);
+
+        graphics.pose().popPose();
+    }
+
+    private @Nullable ContextMenuLayout getContextMenuLayout() {
+        if (contextMenu == null) {
+            return null;
+        }
+        int textWidth = Math.max(
+                minecraft.font.width(CONTEXT_MENU_SHARE),
+                minecraft.font.width(CONTEXT_MENU_COPY)
+        );
+        int menuWidth = CONTEXT_MENU_PADDING * 2 + textWidth;
+        int menuHeight = CONTEXT_MENU_PADDING * 2 + CONTEXT_MENU_ITEM_HEIGHT * 2;
+
+        int maxX = getX() + width - menuWidth;
+        int maxY = getY() + height - menuHeight;
+        int menuX = Math.max(getX(), Math.min(contextMenu.x(), maxX));
+        int menuY = Math.max(getY(), Math.min(contextMenu.y(), maxY));
+
+        return new ContextMenuLayout(menuX, menuY, menuWidth, menuHeight, CONTEXT_MENU_ITEM_HEIGHT);
+    }
+
+    private @Nullable ChatMessage getMessageById(UUID messageId) {
+        for (ChatMessage message : messages) {
+            if (message.messageId().equals(messageId)) {
+                return message;
+            }
+        }
+        return null;
+    }
+
+    private @Nullable MessageHit getMessageHit(double mouseX, double mouseY) {
+        int y = getY() + MESSAGE_PADDING - scrollOffset;
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage message = messages.get(i);
+            int msgHeight = MessageRenderer.calculateHeight(minecraft, message, width);
+            if (mouseX >= getX() && mouseX < getX() + width
+                    && mouseY >= y && mouseY < y + msgHeight) {
+                return new MessageHit(i, message, y, msgHeight);
+            }
+            y += msgHeight + MESSAGE_PADDING;
+        }
+        return null;
+    }
+
+    private void handleContextMenuClick(ContextMenuLayout layout, double mouseX, double mouseY) {
+        if (contextMenu == null) {
+            return;
+        }
+        int relativeY = (int) mouseY - layout.y() - CONTEXT_MENU_PADDING;
+        if (relativeY < 0) {
+            contextMenu = null;
+            return;
+        }
+        int itemIndex = relativeY / layout.itemHeight();
+        if (itemIndex == 0) {
+            NetworkHandler.requestShareMessage(contextMenu.messageId());
+        } else if (itemIndex == 1) {
+            ChatMessage message = getMessageById(contextMenu.messageId());
+            if (message != null) {
+                String resolved = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
+                minecraft.keyboardHandler.setClipboard(resolved);
+            }
+        }
+        contextMenu = null;
+    }
+
+    private void handleMessageFocus(ChatMessage message) {
+        if (entityId == null) {
+            return;
+        }
+        UUID messageId = message.messageId();
+        if (focusedMessageId != null && focusedMessageId.equals(messageId)) {
+            clearFocusOnClient();
+            return;
+        }
+
+        int messageIndex = ClientTeamCache.getMessageIndex(entityId, messageId);
+        if (messageIndex < 0) {
+            return;
+        }
+
+        focusedMessageId = messageId;
+        focusedMessageIndex = messageIndex;
+        ChatCapability.get(minecraft.player).ifPresent(data -> data.setFocusedMessage(entityId, messageId, messageIndex));
+        NetworkHandler.sendFocusUpdate(entityId, messageId, messageIndex);
+    }
+
+    private void clearFocusOnClient() {
+        if (entityId == null) {
+            focusedMessageId = null;
+            focusedMessageIndex = -1;
+            return;
+        }
+        focusedMessageId = null;
+        focusedMessageIndex = -1;
+        ChatCapability.get(minecraft.player).ifPresent(data -> data.clearFocusedMessage(entityId));
+        NetworkHandler.clearFocus(entityId);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (isMouseOver(mouseX, mouseY)) {
             scrollOffset = clampScrollOffset(scrollOffset - (int) (delta * SCROLL_SPEED));
+            contextMenu = null;
             return true;
         }
         return false;
@@ -432,8 +624,37 @@ public class ChatHistoryWidget extends AbstractWidget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 1) {
+            ContextMenuLayout layout = getContextMenuLayout();
+            if (layout != null
+                    && mouseX >= layout.x() && mouseX < layout.x() + layout.width()
+                    && mouseY >= layout.y() && mouseY < layout.y() + layout.height()) {
+                contextMenu = null;
+                return true;
+            }
+
+            MessageHit hit = getMessageHit(mouseX, mouseY);
+            if (hit != null) {
+                contextMenu = new ContextMenu(hit.message().messageId(), hit.index(), (int) mouseX, (int) mouseY);
+                return true;
+            }
+
+            contextMenu = null;
+            return false;
+        }
+
         if (button != 0) {
             return false;
+        }
+
+        ContextMenuLayout menuLayout = getContextMenuLayout();
+        if (menuLayout != null) {
+            if (mouseX >= menuLayout.x() && mouseX < menuLayout.x() + menuLayout.width()
+                    && mouseY >= menuLayout.y() && mouseY < menuLayout.y() + menuLayout.height()) {
+                handleContextMenuClick(menuLayout, mouseX, mouseY);
+                return true;
+            }
+            contextMenu = null;
         }
 
         // Check if clicked on scrollbar
@@ -552,6 +773,17 @@ public class ChatHistoryWidget extends AbstractWidget {
         // Clicked outside all buttons - cancel active input if any
         if (activeInput != null && !clickedInsideActiveInput) {
             activeInput = null;
+            return true;
+        }
+
+        MessageHit hit = getMessageHit(mouseX, mouseY);
+        if (hit != null) {
+            handleMessageFocus(hit.message());
+            return true;
+        }
+
+        if (focusedMessageId != null) {
+            clearFocusOnClient();
             return true;
         }
 

@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -24,7 +25,7 @@ import com.yardenzamir.simchat.team.TeamData;
  */
 public class NetworkHandler {
 
-    private static final String PROTOCOL_VERSION = "5";
+    private static final String PROTOCOL_VERSION = "6";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(SimChatMod.MOD_ID, "main"),
@@ -65,6 +66,16 @@ public class NetworkHandler {
                 MarkAsReadPacket::encode,
                 MarkAsReadPacket::decode,
                 MarkAsReadPacket::handle);
+
+        CHANNEL.registerMessage(packetId++, FocusMessagePacket.class,
+                FocusMessagePacket::encode,
+                FocusMessagePacket::decode,
+                FocusMessagePacket::handle);
+
+        CHANNEL.registerMessage(packetId++, ShareMessagePacket.class,
+                ShareMessagePacket::encode,
+                ShareMessagePacket::decode,
+                ShareMessagePacket::handle);
 
         CHANNEL.registerMessage(packetId++, ResolveTemplateRequestPacket.class,
                 ResolveTemplateRequestPacket::encode,
@@ -110,10 +121,10 @@ public class NetworkHandler {
     }
 
     /**
-     * Tells client to open chat screen for an entity.
+     * Tells client to open chat screen for an entity and optional message.
      */
-    public static void openChatScreen(ServerPlayer player, String entityId) {
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenChatScreenPacket(entityId));
+    public static void openChatScreen(ServerPlayer player, String entityId, @org.jetbrains.annotations.Nullable java.util.UUID messageId, int messageIndex) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new OpenChatScreenPacket(entityId, messageId, messageIndex));
     }
 
     /**
@@ -176,6 +187,24 @@ public class NetworkHandler {
      */
     public static void requestOlderMessages(String entityId, int beforeIndex, int count) {
         CHANNEL.sendToServer(new RequestOlderMessagesPacket(entityId, beforeIndex, count));
+    }
+
+    /**
+     * Client updates focused message for an entity.
+     */
+    public static void sendFocusUpdate(String entityId, UUID messageId, int messageIndex) {
+        CHANNEL.sendToServer(new FocusMessagePacket(entityId, messageId, messageIndex));
+    }
+
+    public static void clearFocus(String entityId) {
+        CHANNEL.sendToServer(FocusMessagePacket.clear(entityId));
+    }
+
+    /**
+     * Client requests to share a message to team chat.
+     */
+    public static void requestShareMessage(UUID messageId) {
+        CHANNEL.sendToServer(new ShareMessagePacket(messageId));
     }
 
     /**

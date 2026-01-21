@@ -34,6 +34,7 @@ public class ClientTeamCache {
      */
     private static class MessageCache {
         final TreeMap<Integer, ChatMessage> messages = new TreeMap<>(); // Index -> Message
+        final Map<UUID, Integer> messageIndexById = new HashMap<>();
         int totalCount = 0;
         boolean hasOlderMessages = false;
 
@@ -120,7 +121,10 @@ public class ClientTeamCache {
 
         // Insert messages at their indices
         for (int i = 0; i < messages.size(); i++) {
-            cache.messages.put(startIndex + i, messages.get(i));
+            int messageIndex = startIndex + i;
+            ChatMessage message = messages.get(i);
+            cache.messages.put(messageIndex, message);
+            cache.messageIndexById.put(message.messageId(), messageIndex);
         }
 
         cache.hasOlderMessages = cache.totalCount > cache.messages.size();
@@ -192,15 +196,27 @@ public class ClientTeamCache {
         return cache != null ? cache.getLoadedStart() : 0;
     }
 
+    public static int getMessageIndex(String entityId, UUID messageId) {
+        MessageCache cache = messageCaches.get(entityId);
+        if (cache == null) {
+            return -1;
+        }
+        return cache.messageIndexById.getOrDefault(messageId, -1);
+    }
+
     public static Set<UUID> trimToLatest(int maxMessagesPerEntity) {
         Set<UUID> retained = new HashSet<>();
         for (Map.Entry<String, MessageCache> entry : messageCaches.entrySet()) {
             MessageCache cache = entry.getValue();
             if (maxMessagesPerEntity <= 0) {
                 cache.messages.clear();
+                cache.messageIndexById.clear();
             } else {
                 while (cache.messages.size() > maxMessagesPerEntity) {
-                    cache.messages.pollFirstEntry();
+                    Map.Entry<Integer, ChatMessage> removed = cache.messages.pollFirstEntry();
+                    if (removed != null) {
+                        cache.messageIndexById.remove(removed.getValue().messageId());
+                    }
                 }
             }
             cache.hasOlderMessages = cache.totalCount > cache.messages.size();

@@ -6,6 +6,7 @@ import net.minecraft.nbt.Tag;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Stores per-player read receipt data.
@@ -16,12 +17,60 @@ public class PlayerChatData {
     private static final String TAG_READ_COUNTS = "readCounts";
     private static final String TAG_ENTITY_ID = "entityId";
     private static final String TAG_COUNT = "count";
+    private static final String TAG_FOCUS_ENTRIES = "focusEntries";
+    private static final String TAG_MESSAGE_ID = "messageId";
+    private static final String TAG_MESSAGE_INDEX = "messageIndex";
+    private static final String TAG_LAST_FOCUSED_ENTITY = "lastFocusedEntity";
 
     private final Map<String, Integer> readMessageCounts = new HashMap<>();
+    private final Map<String, FocusInfo> focusedMessages = new HashMap<>();
+    private String lastFocusedEntityId = "";
     private int revision = 0;
+
+    public record FocusInfo(String entityId, UUID messageId, int messageIndex) {}
 
     public int getRevision() {
         return revision;
+    }
+
+    public String getLastFocusedEntityId() {
+        return lastFocusedEntityId;
+    }
+
+    public FocusInfo getFocusedMessage(String entityId) {
+        return focusedMessages.get(entityId);
+    }
+
+    public void setFocusedMessage(String entityId, UUID messageId, int messageIndex) {
+        FocusInfo current = focusedMessages.get(entityId);
+        if (current != null
+                && current.messageId().equals(messageId)
+                && current.messageIndex() == messageIndex) {
+            lastFocusedEntityId = entityId;
+            return;
+        }
+        focusedMessages.put(entityId, new FocusInfo(entityId, messageId, messageIndex));
+        lastFocusedEntityId = entityId;
+        revision++;
+    }
+
+    public void clearFocusedMessage(String entityId) {
+        boolean changed = focusedMessages.remove(entityId) != null;
+        if (entityId.equals(lastFocusedEntityId)) {
+            lastFocusedEntityId = "";
+            changed = true;
+        }
+        if (changed) {
+            revision++;
+        }
+    }
+
+    public void clearAllFocus() {
+        if (!focusedMessages.isEmpty() || !lastFocusedEntityId.isEmpty()) {
+            focusedMessages.clear();
+            lastFocusedEntityId = "";
+            revision++;
+        }
     }
 
     /**
@@ -89,6 +138,21 @@ public class PlayerChatData {
         }
         root.put(TAG_READ_COUNTS, readList);
 
+        if (!focusedMessages.isEmpty()) {
+            ListTag focusList = new ListTag();
+            for (FocusInfo info : focusedMessages.values()) {
+                CompoundTag focusTag = new CompoundTag();
+                focusTag.putString(TAG_ENTITY_ID, info.entityId());
+                focusTag.putString(TAG_MESSAGE_ID, info.messageId().toString());
+                focusTag.putInt(TAG_MESSAGE_INDEX, info.messageIndex());
+                focusList.add(focusTag);
+            }
+            root.put(TAG_FOCUS_ENTRIES, focusList);
+        }
+        if (!lastFocusedEntityId.isEmpty()) {
+            root.putString(TAG_LAST_FOCUSED_ENTITY, lastFocusedEntityId);
+        }
+
         return root;
     }
 
@@ -106,6 +170,25 @@ public class PlayerChatData {
             }
         }
 
+        if (root.contains(TAG_FOCUS_ENTRIES)) {
+            ListTag focusList = root.getList(TAG_FOCUS_ENTRIES, Tag.TAG_COMPOUND);
+            for (int i = 0; i < focusList.size(); i++) {
+                CompoundTag focusTag = focusList.getCompound(i);
+                String entityId = focusTag.getString(TAG_ENTITY_ID);
+                String messageId = focusTag.getString(TAG_MESSAGE_ID);
+                int messageIndex = focusTag.getInt(TAG_MESSAGE_INDEX);
+                try {
+                    data.focusedMessages.put(entityId, new FocusInfo(entityId, UUID.fromString(messageId), messageIndex));
+                } catch (IllegalArgumentException ignored) {
+                    // Skip invalid UUID
+                }
+            }
+        }
+
+        if (root.contains(TAG_LAST_FOCUSED_ENTITY)) {
+            data.lastFocusedEntityId = root.getString(TAG_LAST_FOCUSED_ENTITY);
+        }
+
         return data;
     }
 
@@ -115,6 +198,9 @@ public class PlayerChatData {
     public void copyFrom(PlayerChatData other) {
         this.readMessageCounts.clear();
         this.readMessageCounts.putAll(other.readMessageCounts);
+        this.focusedMessages.clear();
+        this.focusedMessages.putAll(other.focusedMessages);
+        this.lastFocusedEntityId = other.lastFocusedEntityId;
         this.revision++;
     }
 }

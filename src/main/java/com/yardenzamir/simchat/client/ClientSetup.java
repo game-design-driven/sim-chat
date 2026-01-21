@@ -48,7 +48,7 @@ public class ClientSetup {
         if (openChatKey != null && openChatKey.consumeClick()) {
             Minecraft mc = Minecraft.getInstance();
             if (mc.screen == null) {
-                mc.setScreen(new ChatScreen(null));
+                mc.setScreen(new ChatScreen(null, null, -1));
             }
         }
     }

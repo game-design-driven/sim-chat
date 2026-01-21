@@ -26,6 +26,8 @@ public class ChatToast implements Toast {
     private final String senderName;
     private final String messagePreview;
     private final ResourceLocation iconTexture;
+    private static long lastToastEndTime = 0L;
+
     private final String keybindHint;
     private final boolean showKeybindHint;
     private long firstRender = -1;
@@ -37,6 +39,19 @@ public class ChatToast implements Toast {
         this.iconTexture = AvatarManager.getTexture(message.senderImageId());
         this.keybindHint = "[" + keybindName + "]";
         this.showKeybindHint = showKeybindHint;
+        recordToastDuration();
+    }
+
+    public static boolean isToastActive() {
+        return System.currentTimeMillis() < lastToastEndTime;
+    }
+
+    private static void recordToastDuration() {
+        long durationMs = (long) (ClientConfig.TOAST_DURATION.get() * 1000);
+        long endTime = System.currentTimeMillis() + durationMs;
+        if (endTime > lastToastEndTime) {
+            lastToastEndTime = endTime;
+        }
     }
 
     private static String truncateMessage(String text, int maxLength) {

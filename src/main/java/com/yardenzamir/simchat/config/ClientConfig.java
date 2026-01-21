@@ -22,6 +22,7 @@ public class ClientConfig {
     public static final ForgeConfigSpec.IntValue AVATAR_SIZE;
     public static final ForgeConfigSpec.IntValue MESSAGE_PADDING;
     public static final ForgeConfigSpec.IntValue ENTITY_LIST_ITEM_HEIGHT;
+    public static final ForgeConfigSpec.ConfigValue<String> CHAT_BACKGROUND_COLOR;
 
     // History loading
     public static final ForgeConfigSpec.IntValue LAZY_LOAD_BATCH_SIZE;
@@ -83,6 +84,9 @@ public class ClientConfig {
         ENTITY_LIST_ITEM_HEIGHT = builder
                 .comment("Height of each entity in the sidebar list (pixels)")
                 .defineInRange("entityListItemHeight", 48, 32, 80);
+        CHAT_BACKGROUND_COLOR = builder
+                .comment("Background color for the chat panel (ARGB hex, e.g. 0xDD12121F)")
+                .define("chatBackgroundColor", "0xDD12121F");
         SIDEBAR_SORT_MODE = builder
                 .comment("Sort mode for conversation list (0 = Recent, 1 = Alphabetical)")
                 .defineInRange("sidebarSortMode", 0, 0, 1);
@@ -122,5 +126,18 @@ public class ClientConfig {
         builder.pop();
 
         SPEC = builder.build();
+    }
+
+    public static int getChatBackgroundColor() {
+        String raw = CHAT_BACKGROUND_COLOR.get();
+        if (raw == null || raw.isEmpty()) {
+            return 0xDD12121F;
+        }
+        try {
+            long value = Long.decode(raw);
+            return (int) (value & 0xFFFFFFFFL);
+        } catch (NumberFormatException e) {
+            return 0xDD12121F;
+        }
     }
 }

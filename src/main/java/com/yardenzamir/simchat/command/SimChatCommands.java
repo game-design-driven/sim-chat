@@ -1,5 +1,9 @@
 package com.yardenzamir.simchat.command;
 
+import java.util.List;
+import java.util.UUID;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import net.minecraft.commands.CommandSourceStack;
@@ -36,6 +40,7 @@ import com.yardenzamir.simchat.data.DialogueManager;
 import com.yardenzamir.simchat.data.PlayerChatData;
 import com.yardenzamir.simchat.integration.kubejs.KubeJSIntegration;
 import com.yardenzamir.simchat.network.NetworkHandler;
+import com.yardenzamir.simchat.storage.SimChatDatabase;
 import com.yardenzamir.simchat.team.SimChatTeamManager;
 import com.yardenzamir.simchat.team.TeamData;
 
@@ -50,78 +55,92 @@ public class SimChatCommands {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
 
         dispatcher.register(Commands.literal("simchat")
-                .requires(source -> source.hasPermission(ServerConfig.COMMAND_PERMISSION_LEVEL.get()))
                 // send <player> <dialogue_id> - uses entityId from dialogue
                 .then(Commands.literal("send")
+                        .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("send")))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.argument("dialogue_id", ResourceLocationArgument.id())
                                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggestResource(DialogueManager.getDialogueIds(), builder))
                                         .executes(SimChatCommands::sendDialogue))))
                 // system <player> <entity_id> <message> - send a system message
                 .then(Commands.literal("system")
+                        .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("system")))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .then(Commands.argument("entity_id", StringArgumentType.word())
                                         .then(Commands.argument("message", StringArgumentType.greedyString())
                                                 .executes(SimChatCommands::sendSystemMessage)))))
                 // clear <player> [entity_id]
                 .then(Commands.literal("clear")
+                        .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("clear")))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(SimChatCommands::clearAll)
                                 .then(Commands.argument("entity_id", StringArgumentType.word())
                                         .executes(SimChatCommands::clearEntity))))
                 // open <player> [entity_id]
                 .then(Commands.literal("open")
+                        .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("open")))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(SimChatCommands::openChat)
                                 .then(Commands.argument("entity_id", StringArgumentType.word())
                                         .executes(SimChatCommands::openChatEntity))))
+                // openmessage <message_id>
+                .then(Commands.literal("openmessage")
+                        .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("openmessage")))
+                        .then(Commands.argument("message_id", StringArgumentType.word())
+                                .executes(SimChatCommands::openChatMessage)))
                 // team subcommands
                 .then(Commands.literal("team")
                         // team create <title>
                         .then(Commands.literal("create")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.create")))
                                 .then(Commands.argument("title", StringArgumentType.greedyString())
                                         .executes(SimChatCommands::teamCreate)))
                         // team invite [player] - if no player, broadcast to all
                         .then(Commands.literal("invite")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.invite")))
                                 .executes(SimChatCommands::teamInviteBroadcast)
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .executes(SimChatCommands::teamInvite)))
                         // team join <id_or_name>
                         .then(Commands.literal("join")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.join")))
                                 .then(Commands.argument("team", StringArgumentType.greedyString())
                                         .suggests(SimChatCommands::suggestTeams)
                                         .executes(SimChatCommands::teamJoin)))
                         // team list
                         .then(Commands.literal("list")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.list")))
                                 .executes(SimChatCommands::teamList))
                         // team info
                         .then(Commands.literal("info")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.info")))
                                 .executes(SimChatCommands::teamInfo))
                         // team title <title> (own team) or team title <player> <title> (admin)
                         .then(Commands.literal("title")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.title")))
                                 .then(Commands.argument("title", StringArgumentType.greedyString())
                                         .executes(SimChatCommands::teamTitleSelf))
                                 .then(Commands.argument("player", EntityArgument.player())
-                                        .requires(source -> source.hasPermission(2))
                                         .then(Commands.argument("title", StringArgumentType.greedyString())
                                                 .executes(SimChatCommands::teamTitleAdmin))))
                         // team color <color>
                         .then(Commands.literal("color")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("team.color")))
                                 .then(Commands.argument("color", StringArgumentType.word())
                                         .suggests(SimChatCommands::suggestColors)
                                         .executes(SimChatCommands::teamColor))))
                 // reload - re-fire KubeJS callback registration
                 .then(Commands.literal("reload")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("callback.reload")))
                         .executes(SimChatCommands::reloadCallbacks))
                 // callback subcommands for KubeJS callbacks
                 .then(Commands.literal("callback")
-                        .requires(source -> source.hasPermission(2))
-                        // callback list - list all registered callbacks
                         .then(Commands.literal("list")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("callback.list")))
                                 .executes(SimChatCommands::callbackList))
                         // callback run <name> [player] - run a callback and show result
                         .then(Commands.literal("run")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("callback.run")))
                                 .then(Commands.argument("name", StringArgumentType.word())
                                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
                                                 com.yardenzamir.simchat.condition.CallbackRegistry.getCallbackNames(), builder))
@@ -130,14 +149,15 @@ public class SimChatCommands {
                                                 .executes(SimChatCommands::callbackRunPlayer)))))
                 // data subcommands for team data - all accept optional [target] (player or team)
                 .then(Commands.literal("data")
-                        .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("get")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.get")))
                                 .then(Commands.argument("key", StringArgumentType.word())
                                         .executes(SimChatCommands::dataGetSelf)
                                         .then(Commands.argument("target", StringArgumentType.greedyString())
                                                 .suggests(SimChatCommands::suggestTargets)
                                                 .executes(SimChatCommands::dataGetTarget))))
                         .then(Commands.literal("set")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.set")))
                                 .then(Commands.argument("key", StringArgumentType.word())
                                         .then(Commands.argument("value", StringArgumentType.string())
                                                 .executes(SimChatCommands::dataSetSelf)
@@ -145,6 +165,7 @@ public class SimChatCommands {
                                                         .suggests(SimChatCommands::suggestTargets)
                                                         .executes(SimChatCommands::dataSetTarget)))))
                         .then(Commands.literal("add")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.add")))
                                 .then(Commands.argument("key", StringArgumentType.word())
                                         .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
                                                 .executes(SimChatCommands::dataAddSelf)
@@ -152,12 +173,14 @@ public class SimChatCommands {
                                                         .suggests(SimChatCommands::suggestTargets)
                                                         .executes(SimChatCommands::dataAddTarget)))))
                         .then(Commands.literal("remove")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.remove")))
                                 .then(Commands.argument("key", StringArgumentType.word())
                                         .executes(SimChatCommands::dataRemoveSelf)
                                         .then(Commands.argument("target", StringArgumentType.greedyString())
                                                 .suggests(SimChatCommands::suggestTargets)
                                                 .executes(SimChatCommands::dataRemoveTarget))))
                         .then(Commands.literal("list")
+                                .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.list")))
                                 .executes(SimChatCommands::dataListSelf)
                                 .then(Commands.argument("target", StringArgumentType.greedyString())
                                         .suggests(SimChatCommands::suggestTargets)
@@ -287,14 +310,57 @@ public class SimChatCommands {
 
     private static int openChat(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
-        NetworkHandler.openChatScreen(player, "");
+        NetworkHandler.openChatScreen(player, "", null, -1);
         return 1;
     }
 
     private static int openChatEntity(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(ctx, "player");
         String entityId = StringArgumentType.getString(ctx, "entity_id");
-        NetworkHandler.openChatScreen(player, entityId);
+        NetworkHandler.openChatScreen(player, entityId, null, -1);
+        return 1;
+    }
+
+    private static int openChatMessage(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String messageIdText = StringArgumentType.getString(ctx, "message_id");
+        UUID messageId;
+        try {
+            messageId = UUID.fromString(messageIdText);
+        } catch (IllegalArgumentException e) {
+            ctx.getSource().sendFailure(Component.literal("Invalid message id: " + messageIdText));
+            return 0;
+        }
+
+        SimChatTeamManager manager = SimChatTeamManager.get(player.server);
+        TeamData team = manager.getPlayerTeam(player);
+        if (team == null) {
+            ctx.getSource().sendFailure(Component.translatable("simchat.command.error.no_team"));
+            return 0;
+        }
+
+        SimChatDatabase.StoredMessage stored = manager.getMessageById(team, messageId);
+        if (stored == null) {
+            ctx.getSource().sendFailure(Component.literal("Message not found in team."));
+            return 0;
+        }
+
+        int totalCount = manager.getMessageCount(team, stored.entityId());
+        int windowSize = Math.max(1, ServerConfig.INITIAL_SYNC_MESSAGE_COUNT.get());
+        int before = windowSize / 2;
+        int startIndex = Math.max(0, stored.messageIndex() - before);
+        int count = Math.min(windowSize, totalCount - startIndex);
+
+        if (count > 0) {
+            List<ChatMessage> messages = manager.loadMessages(team, stored.entityId(), startIndex, count);
+            NetworkHandler.sendMessages(player, stored.entityId(), messages, totalCount, startIndex);
+        }
+
+        PlayerChatData readData = ChatCapability.getOrThrow(player);
+        readData.setFocusedMessage(stored.entityId(), stored.message().messageId(), stored.messageIndex());
+        NetworkHandler.syncToPlayer(player);
+
+        NetworkHandler.openChatScreen(player, stored.entityId(), stored.message().messageId(), stored.messageIndex());
         return 1;
     }
 

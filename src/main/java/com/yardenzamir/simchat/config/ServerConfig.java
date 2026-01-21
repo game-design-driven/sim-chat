@@ -1,5 +1,8 @@
 package com.yardenzamir.simchat.config;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public class ServerConfig {
@@ -11,8 +14,8 @@ public class ServerConfig {
     public static final ForgeConfigSpec.DoubleValue TYPING_DELAY_MAX;
     public static final ForgeConfigSpec.DoubleValue TYPING_CHARS_PER_SECOND;
 
-    // Permissions
-    public static final ForgeConfigSpec.IntValue COMMAND_PERMISSION_LEVEL;
+    // Command permissions
+    public static final Map<String, ForgeConfigSpec.IntValue> COMMAND_PERMISSIONS = new LinkedHashMap<>();
 
     // History sync
     public static final ForgeConfigSpec.IntValue INITIAL_SYNC_MESSAGE_COUNT;
@@ -40,10 +43,26 @@ public class ServerConfig {
         builder.pop();
 
         builder.comment("Permission Settings").push("permissions");
-        COMMAND_PERMISSION_LEVEL = builder
-                .comment("Required permission level to use /simchat commands (0-4)",
-                        "0 = all players, 1 = moderators, 2 = gamemaster, 3 = admin, 4 = owner")
-                .defineInRange("commandPermissionLevel", 4, 0, 4);
+        commandPermission(builder, "send", 4, "Permission to use /simchat send");
+        commandPermission(builder, "system", 4, "Permission to use /simchat system");
+        commandPermission(builder, "clear", 4, "Permission to use /simchat clear");
+        commandPermission(builder, "open", 4, "Permission to use /simchat open");
+        commandPermission(builder, "openmessage", 0, "Permission to use /simchat openmessage");
+        commandPermission(builder, "team.create", 4, "Permission to use /simchat team create");
+        commandPermission(builder, "team.invite", 4, "Permission to use /simchat team invite");
+        commandPermission(builder, "team.join", 4, "Permission to use /simchat team join");
+        commandPermission(builder, "team.list", 4, "Permission to use /simchat team list");
+        commandPermission(builder, "team.info", 4, "Permission to use /simchat team info");
+        commandPermission(builder, "team.title", 4, "Permission to use /simchat team title");
+        commandPermission(builder, "team.color", 4, "Permission to use /simchat team color");
+        commandPermission(builder, "callback.list", 4, "Permission to use /simchat callback list");
+        commandPermission(builder, "callback.run", 4, "Permission to use /simchat callback run");
+        commandPermission(builder, "callback.reload", 4, "Permission to use /simchat reload");
+        commandPermission(builder, "data.get", 4, "Permission to use /simchat data get");
+        commandPermission(builder, "data.set", 4, "Permission to use /simchat data set");
+        commandPermission(builder, "data.add", 4, "Permission to use /simchat data add");
+        commandPermission(builder, "data.remove", 4, "Permission to use /simchat data remove");
+        commandPermission(builder, "data.list", 4, "Permission to use /simchat data list");
         builder.pop();
 
         builder.comment("History Sync Settings").push("historySync");
@@ -62,5 +81,20 @@ public class ServerConfig {
         builder.pop();
 
         SPEC = builder.build();
+    }
+
+    private static void commandPermission(ForgeConfigSpec.Builder builder, String key, int defaultLevel, String comment) {
+        COMMAND_PERMISSIONS.put(key, builder
+                .comment(comment,
+                        "0 = all players, 1 = moderators, 2 = gamemaster, 3 = admin, 4 = owner")
+                .defineInRange(key, defaultLevel, 0, 4));
+    }
+
+    public static int getCommandPermission(String key) {
+        ForgeConfigSpec.IntValue value = COMMAND_PERMISSIONS.get(key);
+        if (value == null) {
+            return 4;
+        }
+        return value.get();
     }
 }

@@ -24,6 +24,58 @@ public class ClientConfig {
     public static final ForgeConfigSpec.IntValue ENTITY_LIST_ITEM_HEIGHT;
     public static final ForgeConfigSpec.ConfigValue<String> CHAT_BACKGROUND_COLOR;
 
+    // Colors
+    public static final ForgeConfigSpec.ConfigValue<String> SIDEBAR_BACKGROUND_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> DIVIDER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> DIVIDER_HOVER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> HEADER_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> HEADER_SUBTITLE_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> EMPTY_STATE_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> HEADER_SEPARATOR_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> REFRESH_BUTTON_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> REFRESH_BUTTON_HOVER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> REFRESH_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> SORT_BUTTON_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> SORT_BUTTON_HOVER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> SORT_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> COMPACT_HINT_COLOR;
+
+    public static final ForgeConfigSpec.ConfigValue<String> SCROLLBAR_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_BG_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> OUTPUT_BG_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> DISABLED_BG_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> PLAYER_NAME_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> ENTITY_NAME_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> SUBTITLE_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> DAY_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> MESSAGE_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> DISABLED_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> WHITE_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> SYSTEM_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> BUTTON_DEFAULT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> BUTTON_HOVER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> BORDER_DISABLED_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> BORDER_HOVER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> BORDER_DEFAULT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> FOCUS_BORDER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> CONTEXT_MENU_BG_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> CONTEXT_MENU_BORDER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> CONTEXT_MENU_TEXT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> CONTEXT_MENU_HIGHLIGHT_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_VALID_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_INVALID_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_FIELD_BG_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_FIELD_BORDER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_FIELD_BORDER_FOCUSED_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_CURSOR_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_SEND_ENABLED_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> INPUT_SEND_DISABLED_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> TOAST_SENDER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> TOAST_PREVIEW_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> TOAST_BG_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> TOAST_BORDER_COLOR;
+    public static final ForgeConfigSpec.ConfigValue<String> TOAST_HINT_COLOR;
+
     // History loading
     public static final ForgeConfigSpec.IntValue LAZY_LOAD_BATCH_SIZE;
     public static final ForgeConfigSpec.IntValue LAZY_LOAD_THRESHOLD;
@@ -92,6 +144,59 @@ public class ClientConfig {
                 .defineInRange("sidebarSortMode", 0, 0, 1);
         builder.pop();
 
+        builder.comment("Color Settings").push("colors");
+        SIDEBAR_BACKGROUND_COLOR = builder.define("sidebarBackgroundColor", "0xDD1A1A2E");
+        DIVIDER_COLOR = builder.define("dividerColor", "0xFF3D3D5C");
+        DIVIDER_HOVER_COLOR = builder.define("dividerHoverColor", "0xFF6060A0");
+        HEADER_TEXT_COLOR = builder.define("headerTextColor", "0xFFFFFFFF");
+        HEADER_SUBTITLE_COLOR = builder.define("headerSubtitleColor", "0xFF888888");
+        EMPTY_STATE_TEXT_COLOR = builder.define("emptyStateTextColor", "0xFF888888");
+        HEADER_SEPARATOR_COLOR = builder.define("headerSeparatorColor", "0xFF3D3D5C");
+        REFRESH_BUTTON_COLOR = builder.define("refreshButtonColor", "0xFF303050");
+        REFRESH_BUTTON_HOVER_COLOR = builder.define("refreshButtonHoverColor", "0xFF404060");
+        REFRESH_TEXT_COLOR = builder.define("refreshTextColor", "0xFFCCCCCC");
+        SORT_BUTTON_COLOR = builder.define("sortButtonColor", "0xFF303050");
+        SORT_BUTTON_HOVER_COLOR = builder.define("sortButtonHoverColor", "0xFF404060");
+        SORT_TEXT_COLOR = builder.define("sortTextColor", "0xFFCCCCCC");
+        COMPACT_HINT_COLOR = builder.define("compactHintColor", "0xFF888888");
+
+        SCROLLBAR_COLOR = builder.define("scrollbarColor", "0x80FFFFFF");
+        INPUT_BG_COLOR = builder.define("inputBgColor", "0xFF0968B6");
+        OUTPUT_BG_COLOR = builder.define("outputBgColor", "0xFFCE640B");
+        DISABLED_BG_COLOR = builder.define("disabledBgColor", "0xFF404040");
+        PLAYER_NAME_COLOR = builder.define("playerNameColor", "0xFF7BCB8B");
+        ENTITY_NAME_COLOR = builder.define("entityNameColor", "0xFF88AAFF");
+        SUBTITLE_COLOR = builder.define("subtitleColor", "0xFF888888");
+        DAY_TEXT_COLOR = builder.define("dayTextColor", "0xFF666666");
+        MESSAGE_TEXT_COLOR = builder.define("messageTextColor", "0xFFE0E0E0");
+        DISABLED_TEXT_COLOR = builder.define("disabledTextColor", "0xFF808080");
+        WHITE_TEXT_COLOR = builder.define("whiteTextColor", "0xFFFFFFFF");
+        SYSTEM_TEXT_COLOR = builder.define("systemTextColor", "0xFF888888");
+        BUTTON_DEFAULT_COLOR = builder.define("buttonDefaultColor", "0xFF304080");
+        BUTTON_HOVER_COLOR = builder.define("buttonHoverColor", "0xFF4060A0");
+        BORDER_DISABLED_COLOR = builder.define("borderDisabledColor", "0xFF606060");
+        BORDER_HOVER_COLOR = builder.define("borderHoverColor", "0xFF6080C0");
+        BORDER_DEFAULT_COLOR = builder.define("borderDefaultColor", "0xFF405090");
+        FOCUS_BORDER_COLOR = builder.define("focusBorderColor", "0xFF6FA8FF");
+        CONTEXT_MENU_BG_COLOR = builder.define("contextMenuBgColor", "0xFF202030");
+        CONTEXT_MENU_BORDER_COLOR = builder.define("contextMenuBorderColor", "0xFF505070");
+        CONTEXT_MENU_TEXT_COLOR = builder.define("contextMenuTextColor", "0xFFE0E0E0");
+        CONTEXT_MENU_HIGHLIGHT_COLOR = builder.define("contextMenuHighlightColor", "0x2A405070");
+        INPUT_VALID_COLOR = builder.define("inputValidColor", "0xFF55FF55");
+        INPUT_INVALID_COLOR = builder.define("inputInvalidColor", "0xFFFF5555");
+        INPUT_FIELD_BG_COLOR = builder.define("inputFieldBgColor", "0xFF202020");
+        INPUT_FIELD_BORDER_COLOR = builder.define("inputFieldBorderColor", "0xFF404040");
+        INPUT_FIELD_BORDER_FOCUSED_COLOR = builder.define("inputFieldBorderFocusedColor", "0xFF606060");
+        INPUT_CURSOR_COLOR = builder.define("inputCursorColor", "0xFFFFFFFF");
+        INPUT_SEND_ENABLED_COLOR = builder.define("inputSendEnabledColor", "0xFF308030");
+        INPUT_SEND_DISABLED_COLOR = builder.define("inputSendDisabledColor", "0xFF404040");
+        TOAST_SENDER_COLOR = builder.define("toastSenderColor", "0xFF88AAFF");
+        TOAST_PREVIEW_COLOR = builder.define("toastPreviewColor", "0xFFCCCCCC");
+        TOAST_BG_COLOR = builder.define("toastBackgroundColor", "0xF0202030");
+        TOAST_BORDER_COLOR = builder.define("toastBorderColor", "0xFF404060");
+        TOAST_HINT_COLOR = builder.define("toastHintColor", "0xFF666688");
+        builder.pop();
+
         builder.comment("History Loading Settings").push("history");
         LAZY_LOAD_BATCH_SIZE = builder
                 .comment("How many messages to request when scrolling up")
@@ -129,15 +234,19 @@ public class ClientConfig {
     }
 
     public static int getChatBackgroundColor() {
-        String raw = CHAT_BACKGROUND_COLOR.get();
+        return getColor(CHAT_BACKGROUND_COLOR, 0xDD12121F);
+    }
+
+    public static int getColor(ForgeConfigSpec.ConfigValue<String> value, int fallback) {
+        String raw = value.get();
         if (raw == null || raw.isEmpty()) {
-            return 0xDD12121F;
+            return fallback;
         }
         try {
-            long value = Long.decode(raw);
-            return (int) (value & 0xFFFFFFFFL);
+            long parsed = Long.decode(raw);
+            return (int) (parsed & 0xFFFFFFFFL);
         } catch (NumberFormatException e) {
-            return 0xDD12121F;
+            return fallback;
         }
     }
 }

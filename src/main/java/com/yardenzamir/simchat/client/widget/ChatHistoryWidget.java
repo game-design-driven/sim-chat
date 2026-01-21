@@ -19,6 +19,7 @@ import com.yardenzamir.simchat.capability.ChatCapability;
 import com.yardenzamir.simchat.client.ClientTeamCache;
 import com.yardenzamir.simchat.client.ClientTemplateEngine;
 import com.yardenzamir.simchat.client.RuntimeTemplateResolver;
+import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatAction;
 import com.yardenzamir.simchat.data.ChatMessage;
 import com.yardenzamir.simchat.network.ActionClickPacket;
@@ -384,12 +385,14 @@ public class ChatHistoryWidget extends AbstractWidget {
                 int focusHeight = Math.max(1, clampedBottom - clampedTop);
 
                 if (contextMenu != null && contextMenu.messageId().equals(message.messageId())) {
-                    graphics.fill(getX(), clampedTop, getX() + width, clampedTop + focusHeight, CONTEXT_MENU_HIGHLIGHT_COLOR);
+                    graphics.fill(getX(), clampedTop, getX() + width, clampedTop + focusHeight,
+                            ClientConfig.getColor(ClientConfig.CONTEXT_MENU_HIGHLIGHT_COLOR, DEFAULT_CONTEXT_MENU_HIGHLIGHT_COLOR));
                 }
 
                 boolean isFocused = focusedMessageId != null && focusedMessageId.equals(message.messageId());
                 if (isFocused) {
-                    graphics.renderOutline(getX(), clampedTop, width, focusHeight, FOCUS_BORDER_COLOR);
+                    graphics.renderOutline(getX(), clampedTop, width, focusHeight,
+                            ClientConfig.getColor(ClientConfig.FOCUS_BORDER_COLOR, DEFAULT_FOCUS_BORDER_COLOR));
                 }
 
                 // Build active input info if this message has the active input
@@ -432,7 +435,7 @@ public class ChatHistoryWidget extends AbstractWidget {
                     getY() + scrollbarY,
                     getX() + width - 1,
                     getY() + scrollbarY + scrollbarHeight,
-                    SCROLLBAR_COLOR
+                    ClientConfig.getColor(ClientConfig.SCROLLBAR_COLOR, DEFAULT_SCROLLBAR_COLOR)
             );
         }
     }
@@ -486,13 +489,16 @@ public class ChatHistoryWidget extends AbstractWidget {
         int height = layout.height();
         int itemHeight = layout.itemHeight();
 
-        graphics.fill(x, y, x + width, y + height, CONTEXT_MENU_BG_COLOR);
-        graphics.renderOutline(x, y, width, height, CONTEXT_MENU_BORDER_COLOR);
+        graphics.fill(x, y, x + width, y + height,
+                ClientConfig.getColor(ClientConfig.CONTEXT_MENU_BG_COLOR, DEFAULT_CONTEXT_MENU_BG_COLOR));
+        graphics.renderOutline(x, y, width, height,
+                ClientConfig.getColor(ClientConfig.CONTEXT_MENU_BORDER_COLOR, DEFAULT_CONTEXT_MENU_BORDER_COLOR));
 
         int textX = x + CONTEXT_MENU_PADDING;
         int textY = y + CONTEXT_MENU_PADDING + (itemHeight - minecraft.font.lineHeight) / 2;
-        graphics.drawString(minecraft.font, CONTEXT_MENU_SHARE, textX, textY, CONTEXT_MENU_TEXT_COLOR);
-        graphics.drawString(minecraft.font, CONTEXT_MENU_COPY, textX, textY + itemHeight, CONTEXT_MENU_TEXT_COLOR);
+        int textColor = ClientConfig.getColor(ClientConfig.CONTEXT_MENU_TEXT_COLOR, DEFAULT_CONTEXT_MENU_TEXT_COLOR);
+        graphics.drawString(minecraft.font, CONTEXT_MENU_SHARE, textX, textY, textColor);
+        graphics.drawString(minecraft.font, CONTEXT_MENU_COPY, textX, textY + itemHeight, textColor);
 
         graphics.pose().popPose();
     }

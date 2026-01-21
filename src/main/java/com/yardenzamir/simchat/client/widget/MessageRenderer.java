@@ -72,7 +72,9 @@ public final class MessageRenderer {
 
         // Sender name with subtitle
         String resolvedName = RuntimeTemplateResolver.resolveSenderName(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
-        int nameColor = message.isPlayerMessage() ? getPlayerNameColor() : ENTITY_NAME_COLOR;
+        int nameColor = message.isPlayerMessage()
+                ? getPlayerNameColor()
+                : ClientConfig.getColor(ClientConfig.ENTITY_NAME_COLOR, DEFAULT_ENTITY_NAME_COLOR);
         graphics.drawString(mc.font, resolvedName, textX, textY, nameColor);
         int nextX = textX + mc.font.width(resolvedName);
 
@@ -80,22 +82,25 @@ public final class MessageRenderer {
         String resolvedSubtitle = RuntimeTemplateResolver.resolveSenderSubtitle(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
         if (resolvedSubtitle != null && !resolvedSubtitle.isEmpty()) {
             String subtitle = " - " + resolvedSubtitle;
-            graphics.drawString(mc.font, subtitle, nextX, textY, SUBTITLE_COLOR);
+            graphics.drawString(mc.font, subtitle, nextX, textY,
+                    ClientConfig.getColor(ClientConfig.SUBTITLE_COLOR, DEFAULT_SUBTITLE_COLOR));
             nextX += mc.font.width(subtitle);
         }
 
         // Show day on hover
         if (isHovered) {
             String dayText = "  " + Component.translatable("simchat.chat.day", message.worldDay()).getString();
-            graphics.drawString(mc.font, dayText, nextX, textY, DAY_TEXT_COLOR);
+            graphics.drawString(mc.font, dayText, nextX, textY,
+                    ClientConfig.getColor(ClientConfig.DAY_TEXT_COLOR, DEFAULT_DAY_TEXT_COLOR));
         }
         textY += mc.font.lineHeight + 2;
 
         // Message content
         String resolvedContent = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
         List<String> wrappedLines = wrapText(mc, resolvedContent, textWidth);
+        int messageTextColor = ClientConfig.getColor(ClientConfig.MESSAGE_TEXT_COLOR, DEFAULT_MESSAGE_TEXT_COLOR);
         for (String line : wrappedLines) {
-            graphics.drawString(mc.font, line, textX, textY, MESSAGE_TEXT_COLOR);
+            graphics.drawString(mc.font, line, textX, textY, messageTextColor);
             textY += mc.font.lineHeight + 2;
         }
 
@@ -179,27 +184,30 @@ public final class MessageRenderer {
             int startX = x + (contentWidth - totalWidth) / 2;
             int currentX = startX;
             int itemY = centerY;
+            int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
+            int systemTextColor = ClientConfig.getColor(ClientConfig.SYSTEM_TEXT_COLOR, DEFAULT_SYSTEM_TEXT_COLOR);
 
             if (inputWidth > 0 && outputWidth > 0) {
                 currentX = renderTransactionItems(graphics, mc, message.transactionInput(),
-                        currentX, itemY, INPUT_BG_COLOR, mouseX, mouseY, hoverState);
-                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
-                graphics.drawString(mc.font, arrowText, currentX, textY, SYSTEM_TEXT_COLOR);
+                        currentX, itemY, ClientConfig.getColor(ClientConfig.INPUT_BG_COLOR, DEFAULT_INPUT_BG_COLOR),
+                        mouseX, mouseY, hoverState);
+                graphics.drawString(mc.font, arrowText, currentX, textY, systemTextColor);
                 currentX += arrowWidth;
                 renderTransactionItems(graphics, mc, message.transactionOutput(),
-                        currentX, itemY, OUTPUT_BG_COLOR, mouseX, mouseY, hoverState);
+                        currentX, itemY, ClientConfig.getColor(ClientConfig.OUTPUT_BG_COLOR, DEFAULT_OUTPUT_BG_COLOR),
+                        mouseX, mouseY, hoverState);
             } else if (inputWidth > 0) {
-                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
-                graphics.drawString(mc.font, soldText, currentX, textY, SYSTEM_TEXT_COLOR);
+                graphics.drawString(mc.font, soldText, currentX, textY, systemTextColor);
                 currentX += mc.font.width(soldText);
                 renderTransactionItems(graphics, mc, message.transactionInput(),
-                        currentX, itemY, INPUT_BG_COLOR, mouseX, mouseY, hoverState);
+                        currentX, itemY, ClientConfig.getColor(ClientConfig.INPUT_BG_COLOR, DEFAULT_INPUT_BG_COLOR),
+                        mouseX, mouseY, hoverState);
             } else {
-                int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
-                graphics.drawString(mc.font, receivedText, currentX, textY, SYSTEM_TEXT_COLOR);
+                graphics.drawString(mc.font, receivedText, currentX, textY, systemTextColor);
                 currentX += mc.font.width(receivedText);
                 renderTransactionItems(graphics, mc, message.transactionOutput(),
-                        currentX, itemY, OUTPUT_BG_COLOR, mouseX, mouseY, hoverState);
+                        currentX, itemY, ClientConfig.getColor(ClientConfig.OUTPUT_BG_COLOR, DEFAULT_OUTPUT_BG_COLOR),
+                        mouseX, mouseY, hoverState);
             }
         } else {
             String resolvedContent = RuntimeTemplateResolver.resolveContent(message, RuntimeTemplateResolver.ResolutionPriority.HIGH);
@@ -208,7 +216,8 @@ public final class MessageRenderer {
                 int textWidth = mc.font.width(resolvedContent);
                 int textX = x + (contentWidth - textWidth) / 2;
                 int textY = y + (SYSTEM_MESSAGE_HEIGHT - mc.font.lineHeight) / 2;
-                graphics.drawString(mc.font, resolvedContent, textX, textY, SYSTEM_TEXT_COLOR);
+                graphics.drawString(mc.font, resolvedContent, textX, textY,
+                        ClientConfig.getColor(ClientConfig.SYSTEM_TEXT_COLOR, DEFAULT_SYSTEM_TEXT_COLOR));
             }
         }
     }
@@ -225,7 +234,8 @@ public final class MessageRenderer {
         int textX = x + AVATAR_SIZE + MESSAGE_PADDING;
         int textY = y;
 
-        graphics.drawString(mc.font, entityName != null ? entityName : "...", textX, textY, ENTITY_NAME_COLOR);
+        graphics.drawString(mc.font, entityName != null ? entityName : "...", textX, textY,
+                ClientConfig.getColor(ClientConfig.ENTITY_NAME_COLOR, DEFAULT_ENTITY_NAME_COLOR));
         textY += mc.font.lineHeight + 2;
 
         long time = System.currentTimeMillis();
@@ -236,7 +246,8 @@ public final class MessageRenderer {
             dots.append(".");
         }
         String typingText = Component.translatable("simchat.chat.typing").getString() + dots;
-        graphics.drawString(mc.font, typingText, textX, textY, SYSTEM_TEXT_COLOR);
+        graphics.drawString(mc.font, typingText, textX, textY,
+                ClientConfig.getColor(ClientConfig.SYSTEM_TEXT_COLOR, DEFAULT_SYSTEM_TEXT_COLOR));
     }
 
     /**
@@ -315,10 +326,17 @@ public final class MessageRenderer {
 
     private static int getPlayerNameColor() {
         TeamData team = ClientTeamCache.getTeam();
+        int defaultColor = ClientConfig.getColor(ClientConfig.PLAYER_NAME_COLOR, DEFAULT_PLAYER_NAME_COLOR);
         if (team == null) {
-            return PLAYER_NAME_COLOR;
+            return defaultColor;
         }
-        return TeamData.getColorValue(team.getColor());
+
+        Integer color = team.getColor();
+        if (color == null || color == 0) {
+            return defaultColor;
+        }
+
+        return color;
     }
 
     private static void renderAvatar(GuiGraphics graphics, Minecraft mc, ChatMessage message, int x, int y) {

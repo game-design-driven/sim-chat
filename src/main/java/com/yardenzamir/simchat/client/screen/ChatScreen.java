@@ -336,9 +336,12 @@ public class ChatScreen extends Screen {
 
         renderBackground(graphics);
 
-        graphics.fill(0, 0, sidebarWidth, height, 0xDD1a1a2e);
+        graphics.fill(0, 0, sidebarWidth, height,
+                ClientConfig.getColor(ClientConfig.SIDEBAR_BACKGROUND_COLOR, 0xDD1A1A2E));
 
-        int dividerColor = (hoveringDivider || draggingDivider) ? 0xFF6060a0 : 0xFF3d3d5c;
+        int dividerColor = (hoveringDivider || draggingDivider)
+                ? ClientConfig.getColor(ClientConfig.DIVIDER_HOVER_COLOR, 0xFF6060A0)
+                : ClientConfig.getColor(ClientConfig.DIVIDER_COLOR, 0xFF3D3D5C);
         graphics.fill(sidebarWidth - 1, 0, sidebarWidth + 1, height, dividerColor);
 
         graphics.fill(sidebarWidth, 0, width, height, ClientConfig.getChatBackgroundColor());
@@ -352,61 +355,74 @@ public class ChatScreen extends Screen {
                     : team.getEntityDisplayName(selectedEntityId);
             if (displayName == null) displayName = selectedEntityId;
             int nameX = sidebarWidth + PADDING;
-            graphics.drawString(font, displayName, nameX, PADDING + 4, 0xFFFFFFFF);
+            graphics.drawString(font, displayName, nameX, PADDING + 4,
+                    ClientConfig.getColor(ClientConfig.HEADER_TEXT_COLOR, 0xFFFFFFFF));
 
             String subtitle = lastMessage != null
                     ? RuntimeTemplateResolver.resolveSenderSubtitle(lastMessage, RuntimeTemplateResolver.ResolutionPriority.HIGH)
                     : team.getEntitySubtitle(selectedEntityId);
             if (subtitle != null) {
                 int subtitleX = nameX + font.width(displayName);
-                graphics.drawString(font, " - " + subtitle, subtitleX, PADDING + 4, 0xFF888888);
+                graphics.drawString(font, " - " + subtitle, subtitleX, PADDING + 4,
+                        ClientConfig.getColor(ClientConfig.HEADER_SUBTITLE_COLOR, 0xFF888888));
             }
-        } else {
-            Component emptyText = Component.translatable("simchat.screen.select_conversation");
+        }
+
+        // Refresh button
+        if (selectedEntityId != null) {
+            int refreshButtonX = getRefreshButtonX();
+            int refreshButtonY = getRefreshButtonY();
+            int refreshButtonWidth = getRefreshButtonWidth();
+            int refreshButtonHeight = getRefreshButtonHeight();
+            boolean refreshHovered = isOverRefreshButton(mouseX, mouseY);
+
+            int refreshBg = refreshHovered
+                    ? ClientConfig.getColor(ClientConfig.REFRESH_BUTTON_HOVER_COLOR, 0xFF404060)
+                    : ClientConfig.getColor(ClientConfig.REFRESH_BUTTON_COLOR, 0xFF303050);
+            graphics.fill(refreshButtonX, refreshButtonY,
+                    refreshButtonX + refreshButtonWidth, refreshButtonY + refreshButtonHeight,
+                    refreshBg);
+            graphics.drawString(font, getRefreshText(), refreshButtonX + HEADER_BUTTON_PADDING,
+                    refreshButtonY + 2,
+                    ClientConfig.getColor(ClientConfig.REFRESH_TEXT_COLOR, 0xFFCCCCCC));
+        }
+
+        // Header divider
+        graphics.fill(sidebarWidth, HEADER_HEIGHT, width, HEADER_HEIGHT + 1,
+                ClientConfig.getColor(ClientConfig.HEADER_SEPARATOR_COLOR, 0xFF3D3D5C));
+
+        if (team != null && !team.hasConversations()) {
+            Component emptyText = Component.translatable("simchat.screen.no_messages");
             int textWidth = font.width(emptyText);
             int centerX = sidebarWidth + (width - sidebarWidth) / 2;
             int centerY = height / 2;
-            graphics.drawString(font, emptyText, centerX - textWidth / 2, centerY, 0xFF888888);
+            graphics.drawString(font, emptyText, centerX - textWidth / 2, centerY,
+                    ClientConfig.getColor(ClientConfig.EMPTY_STATE_TEXT_COLOR, 0xFF888888));
         }
 
-        Component refreshText = getRefreshText();
-        int refreshButtonWidth = getRefreshButtonWidth();
-        int refreshButtonHeight = getRefreshButtonHeight();
-        int refreshButtonX = getRefreshButtonX();
-        int refreshButtonY = getRefreshButtonY();
-        boolean refreshHovered = isOverRefreshButton(mouseX, mouseY);
-        int refreshBg = refreshHovered ? 0xFF404060 : 0xFF303050;
-        graphics.fill(refreshButtonX, refreshButtonY, refreshButtonX + refreshButtonWidth,
-                refreshButtonY + refreshButtonHeight, refreshBg);
-        graphics.drawString(font, refreshText,
-                refreshButtonX + (refreshButtonWidth - font.width(refreshText)) / 2,
-                refreshButtonY + 2, 0xFFCCCCCC);
-
-        graphics.fill(sidebarWidth, HEADER_HEIGHT, width, HEADER_HEIGHT + 1, 0xFF3d3d5c);
-
-        // Sort button
         if (!isCompactMode()) {
-            Component sortText = sortMode.getDisplayName();
-            int sortTextWidth = font.width(sortText);
             int sortButtonX = PADDING;
             int sortButtonY = height - PADDING - font.lineHeight - 4;
             int sortButtonWidth = sidebarWidth - PADDING * 2 - DIVIDER_WIDTH;
-
             boolean sortHovered = mouseX >= sortButtonX && mouseX < sortButtonX + sortButtonWidth
                     && mouseY >= sortButtonY && mouseY < sortButtonY + font.lineHeight + 4;
-            int buttonBg = sortHovered ? 0xFF404060 : 0xFF303050;
+            int buttonBg = sortHovered
+                    ? ClientConfig.getColor(ClientConfig.SORT_BUTTON_HOVER_COLOR, 0xFF404060)
+                    : ClientConfig.getColor(ClientConfig.SORT_BUTTON_COLOR, 0xFF303050);
             graphics.fill(sortButtonX, sortButtonY, sortButtonX + sortButtonWidth, sortButtonY + font.lineHeight + 4, buttonBg);
-            graphics.drawString(font, sortText, sortButtonX + (sortButtonWidth - sortTextWidth) / 2, sortButtonY + 2, 0xFFCCCCCC);
+            String sortText = sortMode == SortMode.RECENT ? "Sort: Recent" : "Sort: A-Z";
+            int sortTextWidth = font.width(sortText);
+            graphics.drawString(font, sortText, sortButtonX + (sortButtonWidth - sortTextWidth) / 2, sortButtonY + 2,
+                    ClientConfig.getColor(ClientConfig.SORT_TEXT_COLOR, 0xFFCCCCCC));
         }
 
-        // Empty state
-        if (team == null || !team.hasConversations()) {
-            Component emptyText = Component.translatable("simchat.screen.no_messages");
-            int emptyTextWidth = font.width(emptyText);
-            graphics.drawString(font, emptyText,
-                    (sidebarWidth - emptyTextWidth) / 2,
-                    height / 2,
-                    0xFF888888);
+        if (isCompactMode()) {
+            String hint = Component.translatable("simchat.screen.sort_hint").getString();
+            int hintWidth = font.width(hint);
+            int hintX = sidebarWidth - PADDING - hintWidth;
+            int hintY = height - PADDING - font.lineHeight;
+            graphics.drawString(font, hint, hintX, hintY,
+                    ClientConfig.getColor(ClientConfig.COMPACT_HINT_COLOR, 0xFF888888));
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);

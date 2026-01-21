@@ -9,6 +9,7 @@ import net.minecraft.world.item.ItemStack;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.yardenzamir.simchat.config.ClientConfig;
 import com.yardenzamir.simchat.data.ChatAction;
 
 import static com.yardenzamir.simchat.client.widget.ChatHistoryConstants.*;
@@ -37,15 +38,19 @@ public final class ActionButtonRenderer {
         int bgColor = determineBackgroundColor(action, hovered, isDisabled);
         graphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + BUTTON_HEIGHT, bgColor);
 
-        int borderColor = isDisabled ? BORDER_DISABLED_COLOR
-                : (hovered ? BORDER_HOVER_COLOR : BORDER_DEFAULT_COLOR);
+        int borderColor = isDisabled
+                ? ClientConfig.getColor(ClientConfig.BORDER_DISABLED_COLOR, DEFAULT_BORDER_DISABLED_COLOR)
+                : (hovered
+                        ? ClientConfig.getColor(ClientConfig.BORDER_HOVER_COLOR, DEFAULT_BORDER_HOVER_COLOR)
+                        : ClientConfig.getColor(ClientConfig.BORDER_DEFAULT_COLOR, DEFAULT_BORDER_DEFAULT_COLOR));
 
         int currentX = buttonX + BUTTON_INTERNAL_PADDING;
         int itemY = buttonY + (BUTTON_HEIGHT - ITEM_ICON_SIZE) / 2;
 
         // Render INPUT items (blue background)
         currentX = renderItems(graphics, mc, action.itemsInput(), currentX, itemY, buttonY,
-                INPUT_BG_COLOR, mouseX, mouseY, isDisabled, hoverState);
+                ClientConfig.getColor(ClientConfig.INPUT_BG_COLOR, DEFAULT_INPUT_BG_COLOR),
+                mouseX, mouseY, isDisabled, hoverState);
 
         // Render VISUAL items (no background)
         currentX = renderItems(graphics, mc, action.itemsVisual(), currentX, itemY, buttonY,
@@ -54,13 +59,16 @@ public final class ActionButtonRenderer {
         // Button label
         int labelX = currentX + BUTTON_INTERNAL_PADDING;
         int textYOffset = (BUTTON_HEIGHT - mc.font.lineHeight) / 2;
-        int textColor = isDisabled ? DISABLED_TEXT_COLOR : WHITE_TEXT_COLOR;
+        int textColor = isDisabled
+                ? ClientConfig.getColor(ClientConfig.DISABLED_TEXT_COLOR, DEFAULT_DISABLED_TEXT_COLOR)
+                : ClientConfig.getColor(ClientConfig.WHITE_TEXT_COLOR, DEFAULT_WHITE_TEXT_COLOR);
         graphics.drawString(mc.font, label, labelX, buttonY + textYOffset, textColor);
         currentX = labelX + mc.font.width(label) + BUTTON_INTERNAL_PADDING;
 
         // Render OUTPUT items (orange background)
         renderItems(graphics, mc, action.itemsOutput(), currentX, itemY, buttonY,
-                OUTPUT_BG_COLOR, mouseX, mouseY, isDisabled, hoverState);
+                ClientConfig.getColor(ClientConfig.OUTPUT_BG_COLOR, DEFAULT_OUTPUT_BG_COLOR),
+                mouseX, mouseY, isDisabled, hoverState);
 
         graphics.renderOutline(buttonX, buttonY, buttonWidth, BUTTON_HEIGHT, borderColor);
 
@@ -85,13 +93,17 @@ public final class ActionButtonRenderer {
                 && action.itemsVisual().isEmpty();
 
         if (isDisabled) {
-            return DISABLED_BG_COLOR;
+            return ClientConfig.getColor(ClientConfig.DISABLED_BG_COLOR, DEFAULT_DISABLED_BG_COLOR);
         } else if (hasOnlyInput) {
-            return hovered ? brighten(INPUT_BG_COLOR) : INPUT_BG_COLOR;
+            int base = ClientConfig.getColor(ClientConfig.INPUT_BG_COLOR, DEFAULT_INPUT_BG_COLOR);
+            return hovered ? brighten(base) : base;
         } else if (hasOnlyOutput) {
-            return hovered ? brighten(OUTPUT_BG_COLOR) : OUTPUT_BG_COLOR;
+            int base = ClientConfig.getColor(ClientConfig.OUTPUT_BG_COLOR, DEFAULT_OUTPUT_BG_COLOR);
+            return hovered ? brighten(base) : base;
         } else {
-            return hovered ? BUTTON_HOVER_COLOR : BUTTON_DEFAULT_COLOR;
+            return hovered
+                    ? ClientConfig.getColor(ClientConfig.BUTTON_HOVER_COLOR, DEFAULT_BUTTON_HOVER_COLOR)
+                    : ClientConfig.getColor(ClientConfig.BUTTON_DEFAULT_COLOR, DEFAULT_BUTTON_DEFAULT_COLOR);
         }
     }
 
@@ -212,39 +224,48 @@ public final class ActionButtonRenderer {
         boolean canSend = !currentText.isEmpty() && isValid;
 
         // Render text field background
-        graphics.fill(fieldX, fieldY, fieldX + fieldWidth, fieldY + fieldHeight, INPUT_FIELD_BG_COLOR);
-        int borderColor = fieldHovered ? INPUT_FIELD_BORDER_FOCUSED_COLOR : INPUT_FIELD_BORDER_COLOR;
+        graphics.fill(fieldX, fieldY, fieldX + fieldWidth, fieldY + fieldHeight,
+                ClientConfig.getColor(ClientConfig.INPUT_FIELD_BG_COLOR, DEFAULT_INPUT_FIELD_BG_COLOR));
+        int borderColor = fieldHovered
+                ? ClientConfig.getColor(ClientConfig.INPUT_FIELD_BORDER_FOCUSED_COLOR, DEFAULT_INPUT_FIELD_BORDER_FOCUSED_COLOR)
+                : ClientConfig.getColor(ClientConfig.INPUT_FIELD_BORDER_COLOR, DEFAULT_INPUT_FIELD_BORDER_COLOR);
         graphics.renderOutline(fieldX, fieldY, fieldWidth, fieldHeight, borderColor);
 
-        // Render text with validation color
-        int textColor = currentText.isEmpty() ? SUBTITLE_COLOR : (isValid ? INPUT_VALID_COLOR : INPUT_INVALID_COLOR);
-        int textX = fieldX + INPUT_FIELD_PADDING;
+        int textColor;
+        if (currentText.isEmpty()) {
+            textColor = ClientConfig.getColor(ClientConfig.SUBTITLE_COLOR, DEFAULT_SUBTITLE_COLOR);
+        } else {
+            textColor = isValid
+                    ? ClientConfig.getColor(ClientConfig.INPUT_VALID_COLOR, DEFAULT_INPUT_VALID_COLOR)
+                    : ClientConfig.getColor(ClientConfig.INPUT_INVALID_COLOR, DEFAULT_INPUT_INVALID_COLOR);
+        }
         int textY = fieldY + (fieldHeight - mc.font.lineHeight) / 2;
+        graphics.drawString(mc.font, currentText.isEmpty() ? "" : currentText, fieldX + 4, textY, textColor);
 
-        // Truncate display text if too wide
-        String displayText = currentText;
-        int maxTextWidth = fieldWidth - INPUT_FIELD_PADDING * 2 - (cursorVisible ? mc.font.width("_") : 0);
-        while (!displayText.isEmpty() && mc.font.width(displayText) > maxTextWidth) {
-            displayText = displayText.substring(1);
-        }
-        graphics.drawString(mc.font, displayText, textX, textY, textColor);
-
-        // Render cursor
+        // Cursor
         if (cursorVisible) {
-            int cursorX = textX + mc.font.width(displayText);
-            graphics.drawString(mc.font, "_", cursorX, textY, INPUT_CURSOR_COLOR);
+            int cursorX = fieldX + 4 + mc.font.width(currentText);
+            graphics.drawString(mc.font, "_", cursorX, textY,
+                    ClientConfig.getColor(ClientConfig.INPUT_CURSOR_COLOR, DEFAULT_INPUT_CURSOR_COLOR));
         }
 
-        // Render send button
-        int sendBgColor = canSend ? (sendHovered ? brighten(INPUT_SEND_ENABLED_COLOR) : INPUT_SEND_ENABLED_COLOR)
-                                  : INPUT_SEND_DISABLED_COLOR;
-        graphics.fill(sendX, sendY, sendX + sendButtonWidth, sendY + BUTTON_HEIGHT, sendBgColor);
-        int sendBorderColor = canSend ? (sendHovered ? BORDER_HOVER_COLOR : BORDER_DEFAULT_COLOR) : BORDER_DISABLED_COLOR;
-        graphics.renderOutline(sendX, sendY, sendButtonWidth, BUTTON_HEIGHT, sendBorderColor);
+        // Send button
+        int sendEnabledColor = ClientConfig.getColor(ClientConfig.INPUT_SEND_ENABLED_COLOR, DEFAULT_INPUT_SEND_ENABLED_COLOR);
+        int sendBgColor = canSend ? (sendHovered ? brighten(sendEnabledColor) : sendEnabledColor)
+                                  : ClientConfig.getColor(ClientConfig.INPUT_SEND_DISABLED_COLOR, DEFAULT_INPUT_SEND_DISABLED_COLOR);
+        graphics.fill(sendX, fieldY, sendX + sendButtonWidth, fieldY + fieldHeight, sendBgColor);
 
-        // Send button text
-        String sendLabel = Component.translatable("simchat.input.send").getString();
-        int sendTextColor = canSend ? WHITE_TEXT_COLOR : DISABLED_TEXT_COLOR;
+        int sendBorderColor = canSend
+                ? (sendHovered
+                        ? ClientConfig.getColor(ClientConfig.BORDER_HOVER_COLOR, DEFAULT_BORDER_HOVER_COLOR)
+                        : ClientConfig.getColor(ClientConfig.BORDER_DEFAULT_COLOR, DEFAULT_BORDER_DEFAULT_COLOR))
+                : ClientConfig.getColor(ClientConfig.BORDER_DISABLED_COLOR, DEFAULT_BORDER_DISABLED_COLOR);
+        graphics.renderOutline(sendX, fieldY, sendButtonWidth, fieldHeight, sendBorderColor);
+
+        int sendTextColor = canSend
+                ? ClientConfig.getColor(ClientConfig.WHITE_TEXT_COLOR, DEFAULT_WHITE_TEXT_COLOR)
+                : ClientConfig.getColor(ClientConfig.DISABLED_TEXT_COLOR, DEFAULT_DISABLED_TEXT_COLOR);
+        String sendLabel = Component.translatable("simchat.chat.send").getString();
         int sendTextX = sendX + (sendButtonWidth - mc.font.width(sendLabel)) / 2;
         int sendTextY = sendY + (BUTTON_HEIGHT - mc.font.lineHeight) / 2;
         graphics.drawString(mc.font, sendLabel, sendTextX, sendTextY, sendTextColor);

@@ -71,9 +71,10 @@ public class ChatToast implements Toast {
         Font font = mc.font;
 
         // Background
-        graphics.fill(0, 0, TOAST_WIDTH, TOAST_HEIGHT, 0xF0202030);
-        graphics.renderOutline(0, 0, TOAST_WIDTH, TOAST_HEIGHT, 0xFF404060);
-
+        graphics.fill(0, 0, TOAST_WIDTH, TOAST_HEIGHT,
+                ClientConfig.getColor(ClientConfig.TOAST_BG_COLOR, 0xF0202030));
+        graphics.renderOutline(0, 0, TOAST_WIDTH, TOAST_HEIGHT,
+                ClientConfig.getColor(ClientConfig.TOAST_BORDER_COLOR, 0xFF404060));
         // Icon - sample full texture, scale to ICON_SIZE (assumes square-ish avatars)
         graphics.blit(iconTexture, PADDING, PADDING, ICON_SIZE, ICON_SIZE, 0, 0, 256, 256, 256, 256);
 
@@ -81,14 +82,16 @@ public class ChatToast implements Toast {
         int textMaxWidth = TOAST_WIDTH - textX - PADDING;
 
         // Sender name
-        graphics.drawString(font, senderName, textX, PADDING, 0xFF88AAFF, false);
+        graphics.drawString(font, senderName, textX, PADDING,
+                ClientConfig.getColor(ClientConfig.TOAST_SENDER_COLOR, 0xFF88AAFF), false);
 
         // Message preview (truncated to fit)
         String preview = messagePreview;
         while (font.width(preview) > textMaxWidth && preview.length() > 3) {
             preview = preview.substring(0, preview.length() - 4) + "...";
         }
-        graphics.drawString(font, preview, textX, PADDING + font.lineHeight + TEXT_SPACING, 0xFFCCCCCC, false);
+        graphics.drawString(font, preview, textX, PADDING + font.lineHeight + TEXT_SPACING,
+                ClientConfig.getColor(ClientConfig.TOAST_PREVIEW_COLOR, 0xFFCCCCCC), false);
 
         // Keybind hint at bottom (only when not already in chat)
         if (showKeybindHint) {
@@ -96,7 +99,7 @@ public class ChatToast implements Toast {
             graphics.drawString(font, keybindHint,
                     TOAST_WIDTH - hintWidth - PADDING,
                     TOAST_HEIGHT - font.lineHeight - 2,
-                    0xFF666688, false);
+                    ClientConfig.getColor(ClientConfig.TOAST_HINT_COLOR, 0xFF666688), false);
         }
 
         long elapsed = timeSinceLastVisible - firstRender;

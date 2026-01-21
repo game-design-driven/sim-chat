@@ -39,6 +39,7 @@ Conversation history is stored in a SQLite database at `<world>/data/simchat/sim
 /simchat system <player> <entityId> <message>  - Send system message
 /simchat clear <player> [entityId]     - Clear chat history
 /simchat open <player> [entityId]      - Open chat screen for player
+/simchat openmessage <messageId>       - Open chat to a specific message
 /simchat reload                        - Reload KubeJS callbacks
 ```
 
@@ -327,6 +328,7 @@ All entity files hot-reload when modified.
 | `toastDuration` | `5.0` | Toast display time (seconds) |
 | `sidebarWidth` | `240` | Conversation list width |
 | `sidebarSortMode` | `0` | Sort: 0=recent, 1=alphabetical |
+| `chatBackgroundColor` | `0xDD12121F` | Chat panel background (ARGB hex) |
 | `lazyLoadBatchSize` | `30` | Messages to request when scrolling up |
 | `lazyLoadThreshold` | `100` | Pixels from top before loading older messages |
 | `closedCacheSize` | `400` | Messages to keep cached per conversation when chat closes |
@@ -338,9 +340,78 @@ All entity files hot-reload when modified.
 | `minDelay` | `0.3` | Minimum typing delay (seconds) |
 | `maxDelay` | `3.0` | Maximum typing delay (seconds) |
 | `charsPerSecond` | `100.0` | Simulated typing speed |
-| `commandPermissionLevel` | `4` | Permission for /simchat commands |
+| `permissions.*` | `4` | Per-command permission levels (0-4) |
+| `permissions.openmessage` | `0` | Allow opening message links |
 | `initialMessageCount` | `30` | Messages per conversation on initial sync |
 | `maxLazyLoadBatchSize` | `100` | Server-side cap for lazy load requests |
+
+### Color Overrides (`simchat-client.toml`)
+
+Color settings live under the `[colors]` section and accept ARGB hex strings (e.g. `0xFF88AAFF`). Example:
+
+```toml
+[ui]
+chatBackgroundColor = "0x8047BAFF"
+
+[colors]
+sidebarBackgroundColor = "0xFF1B2230"
+headerTextColor = "0xFFBBD7FF"
+messageTextColor = "0xFFE8F1FF"
+contextMenuBgColor = "0xFF202030"
+toastBackgroundColor = "0xFF243048"
+```
+
+Available color keys (all optional):
+
+- `sidebarBackgroundColor`
+- `dividerColor`
+- `dividerHoverColor`
+- `headerTextColor`
+- `headerSubtitleColor`
+- `emptyStateTextColor`
+- `headerSeparatorColor`
+- `refreshButtonColor`
+- `refreshButtonHoverColor`
+- `refreshTextColor`
+- `sortButtonColor`
+- `sortButtonHoverColor`
+- `sortTextColor`
+- `compactHintColor`
+- `scrollbarColor`
+- `inputBgColor`
+- `outputBgColor`
+- `disabledBgColor`
+- `playerNameColor`
+- `entityNameColor`
+- `subtitleColor`
+- `dayTextColor`
+- `messageTextColor`
+- `disabledTextColor`
+- `whiteTextColor`
+- `systemTextColor`
+- `buttonDefaultColor`
+- `buttonHoverColor`
+- `borderDisabledColor`
+- `borderHoverColor`
+- `borderDefaultColor`
+- `focusBorderColor`
+- `contextMenuBgColor`
+- `contextMenuBorderColor`
+- `contextMenuTextColor`
+- `contextMenuHighlightColor`
+- `inputValidColor`
+- `inputInvalidColor`
+- `inputFieldBgColor`
+- `inputFieldBorderColor`
+- `inputFieldBorderFocusedColor`
+- `inputCursorColor`
+- `inputSendEnabledColor`
+- `inputSendDisabledColor`
+- `toastSenderColor`
+- `toastPreviewColor`
+- `toastBackgroundColor`
+- `toastBorderColor`
+- `toastHintColor`
 
 ## Keybinds
 

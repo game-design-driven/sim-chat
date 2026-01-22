@@ -342,6 +342,8 @@ All entity files hot-reload when modified.
 | `charsPerSecond` | `100.0` | Simulated typing speed |
 | `permissions.*` | `4` | Per-command permission levels (0-4) |
 | `permissions.openmessage` | `0` | Allow opening message links |
+| `teamJoin.joinBehavior` | `join_largest` | `join_largest`, `join_smallest`, `join_random`, `create_new` |
+| `teamJoin.joinSizeCap` | `-1` | Auto-join cap (-1 disables, creates new if none eligible) |
 | `initialMessageCount` | `30` | Messages per conversation on initial sync |
 | `maxLazyLoadBatchSize` | `100` | Server-side cap for lazy load requests |
 

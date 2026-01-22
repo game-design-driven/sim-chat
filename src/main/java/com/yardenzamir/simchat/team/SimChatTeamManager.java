@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.server.MinecraftServer;
@@ -17,6 +18,7 @@ import net.minecraft.world.scores.Scoreboard;
 import org.jetbrains.annotations.Nullable;
 
 import com.yardenzamir.simchat.SimChatMod;
+import com.yardenzamir.simchat.config.ServerConfig;
 import com.yardenzamir.simchat.data.ChatMessage;
 import com.yardenzamir.simchat.network.NetworkHandler;
 import com.yardenzamir.simchat.storage.SimChatDatabase;
@@ -112,6 +114,11 @@ public class SimChatTeamManager {
     public TeamData getOrCreatePlayerTeam(ServerPlayer player) {
         TeamData team = getPlayerTeam(player);
         if (team == null) {
+            TeamData joinTeam = findJoinTeam();
+            if (joinTeam != null) {
+                assignPlayerToTeam(player, joinTeam, false);
+                return joinTeam;
+            }
             String defaultTitle = "Team " + TeamData.generateId().substring(0, 4).toUpperCase();
             team = createTeam(player, defaultTitle);
         }
@@ -128,7 +135,12 @@ public class SimChatTeamManager {
             return;
         }
 
+        assignPlayerToTeam(player, newTeam, true);
+    }
+
+    private void assignPlayerToTeam(ServerPlayer player, TeamData newTeam, boolean syncClient) {
         UUID playerId = player.getUUID();
+        String newTeamId = newTeam.getId();
         String oldTeamId = playerToTeam.get(playerId);
 
         if (oldTeamId != null && !oldTeamId.equals(newTeamId)) {
@@ -145,7 +157,71 @@ public class SimChatTeamManager {
         saveTeam(newTeam);
 
         addPlayerToVanillaTeam(player, newTeam);
-        NetworkHandler.syncTeamWithLazyLoad(player, newTeam);
+        if (syncClient) {
+            NetworkHandler.syncTeamWithLazyLoad(player, newTeam);
+        }
+    }
+
+    private @Nullable TeamData findJoinTeam() {
+        ServerConfig.JoinBehavior behavior = ServerConfig.getJoinBehavior();
+        if (behavior == ServerConfig.JoinBehavior.CREATE_NEW) {
+            return null;
+        }
+
+        int sizeCap = ServerConfig.JOIN_SIZE_CAP.get();
+        List<TeamData> eligibleTeams = new ArrayList<>();
+        for (TeamData team : getAllTeams()) {
+            if (isTeamEligibleForAutoJoin(team, sizeCap)) {
+                eligibleTeams.add(team);
+            }
+        }
+
+        if (eligibleTeams.isEmpty()) {
+            return null;
+        }
+
+        return switch (behavior) {
+            case JOIN_SMALLEST -> pickSmallestTeam(eligibleTeams);
+            case JOIN_RANDOM -> pickRandomTeam(eligibleTeams);
+            case JOIN_LARGEST -> pickLargestTeam(eligibleTeams);
+            case CREATE_NEW -> null;
+        };
+    }
+
+    private static boolean isTeamEligibleForAutoJoin(TeamData team, int sizeCap) {
+        return sizeCap < 0 || team.getMemberCount() < sizeCap;
+    }
+
+    private static TeamData pickLargestTeam(List<TeamData> teams) {
+        TeamData largest = teams.get(0);
+        int largestCount = largest.getMemberCount();
+        for (int i = 1; i < teams.size(); i++) {
+            TeamData candidate = teams.get(i);
+            int candidateCount = candidate.getMemberCount();
+            if (candidateCount > largestCount) {
+                largest = candidate;
+                largestCount = candidateCount;
+            }
+        }
+        return largest;
+    }
+
+    private static TeamData pickSmallestTeam(List<TeamData> teams) {
+        TeamData smallest = teams.get(0);
+        int smallestCount = smallest.getMemberCount();
+        for (int i = 1; i < teams.size(); i++) {
+            TeamData candidate = teams.get(i);
+            int candidateCount = candidate.getMemberCount();
+            if (candidateCount < smallestCount) {
+                smallest = candidate;
+                smallestCount = candidateCount;
+            }
+        }
+        return smallest;
+    }
+
+    private static TeamData pickRandomTeam(List<TeamData> teams) {
+        return teams.get(ThreadLocalRandom.current().nextInt(teams.size()));
     }
 
     /**

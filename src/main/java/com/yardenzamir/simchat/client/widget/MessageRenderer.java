@@ -326,17 +326,11 @@ public final class MessageRenderer {
 
     private static int getPlayerNameColor() {
         TeamData team = ClientTeamCache.getTeam();
-        int defaultColor = ClientConfig.getColor(ClientConfig.PLAYER_NAME_COLOR, DEFAULT_PLAYER_NAME_COLOR);
         if (team == null) {
-            return defaultColor;
+            return TeamData.getVanillaColorValue(15);
         }
 
-        Integer color = team.getColor();
-        if (color == null || color == 0) {
-            return defaultColor;
-        }
-
-        return color;
+        return team.getVanillaColorValue();
     }
 
     private static void renderAvatar(GuiGraphics graphics, Minecraft mc, ChatMessage message, int x, int y) {

@@ -1,8 +1,8 @@
 package com.yardenzamir.simchat.command;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.UUID;
-import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -75,6 +75,7 @@ public class SimChatCommands {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(SimChatCommands::clearAll)
                                 .then(Commands.argument("entity_id", StringArgumentType.word())
+                                        .suggests(SimChatCommands::suggestEntityIds)
                                         .executes(SimChatCommands::clearEntity))))
                 // open <player> [entity_id]
                 .then(Commands.literal("open")
@@ -82,6 +83,7 @@ public class SimChatCommands {
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(SimChatCommands::openChat)
                                 .then(Commands.argument("entity_id", StringArgumentType.word())
+                                        .suggests(SimChatCommands::suggestEntityIds)
                                         .executes(SimChatCommands::openChatEntity))))
                 // openmessage <message_id>
                 .then(Commands.literal("openmessage")
@@ -148,17 +150,19 @@ public class SimChatCommands {
                                         .then(Commands.argument("player", EntityArgument.player())
                                                 .executes(SimChatCommands::callbackRunPlayer)))))
                 // data subcommands for team data - all accept optional [target] (player or team)
-                .then(Commands.literal("data")
+                        .then(Commands.literal("data")
                         .then(Commands.literal("get")
                                 .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.get")))
-                                .then(Commands.argument("key", StringArgumentType.word())
+                                .then(Commands.argument("key", StringArgumentType.string())
+                                        .suggests(SimChatCommands::suggestDataKeys)
                                         .executes(SimChatCommands::dataGetSelf)
                                         .then(Commands.argument("target", StringArgumentType.greedyString())
                                                 .suggests(SimChatCommands::suggestTargets)
                                                 .executes(SimChatCommands::dataGetTarget))))
                         .then(Commands.literal("set")
                                 .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.set")))
-                                .then(Commands.argument("key", StringArgumentType.word())
+                                .then(Commands.argument("key", StringArgumentType.string())
+                                        .suggests(SimChatCommands::suggestDataKeys)
                                         .then(Commands.argument("value", StringArgumentType.string())
                                                 .executes(SimChatCommands::dataSetSelf)
                                                 .then(Commands.argument("target", StringArgumentType.greedyString())
@@ -166,7 +170,8 @@ public class SimChatCommands {
                                                         .executes(SimChatCommands::dataSetTarget)))))
                         .then(Commands.literal("add")
                                 .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.add")))
-                                .then(Commands.argument("key", StringArgumentType.word())
+                                .then(Commands.argument("key", StringArgumentType.string())
+                                        .suggests(SimChatCommands::suggestDataKeys)
                                         .then(Commands.argument("amount", DoubleArgumentType.doubleArg())
                                                 .executes(SimChatCommands::dataAddSelf)
                                                 .then(Commands.argument("target", StringArgumentType.greedyString())
@@ -174,7 +179,8 @@ public class SimChatCommands {
                                                         .executes(SimChatCommands::dataAddTarget)))))
                         .then(Commands.literal("remove")
                                 .requires(source -> source.hasPermission(ServerConfig.getCommandPermission("data.remove")))
-                                .then(Commands.argument("key", StringArgumentType.word())
+                                .then(Commands.argument("key", StringArgumentType.string())
+                                        .suggests(SimChatCommands::suggestDataKeys)
                                         .executes(SimChatCommands::dataRemoveSelf)
                                         .then(Commands.argument("target", StringArgumentType.greedyString())
                                                 .suggests(SimChatCommands::suggestTargets)
@@ -268,6 +274,7 @@ public class SimChatCommands {
         }
 
         manager.clearAllConversations(team);
+        team.clearData();
         manager.saveTeam(team);
         NetworkHandler.syncTeamToAllMembers(team, player.server);
 
@@ -519,7 +526,7 @@ public class SimChatCommands {
         Component colorLabel = Component.literal("  Color: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
         int colorIndex = Math.max(0, Math.min(15, team.getColor()));
         Component colorVal = Component.literal(TeamData.getColorName(colorIndex))
-                .withStyle(Style.EMPTY.withColor(TeamData.getColorValue(colorIndex)));
+                .withStyle(Style.EMPTY.withColor(TeamData.getVanillaColorValue(colorIndex)));
         ctx.getSource().sendSuccess(() -> colorLabel.copy().append(colorVal), false);
 
         Component convsLabel = Component.literal("  Conversations: ").withStyle(Style.EMPTY.withColor(0xAAAAAA));
@@ -618,7 +625,7 @@ public class SimChatCommands {
 
         String colorName = TeamData.getColorName(colorIndex);
         Component coloredName = Component.literal(colorName)
-                .withStyle(Style.EMPTY.withColor(TeamData.getColorValue(colorIndex)));
+                .withStyle(Style.EMPTY.withColor(TeamData.getVanillaColorValue(colorIndex)));
         ctx.getSource().sendSuccess(() -> Component.translatable("simchat.command.team.color_changed", coloredName), false);
         return 1;
     }
@@ -712,6 +719,61 @@ public class SimChatCommands {
             }
         }
         return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestDataKeys(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        SimChatTeamManager manager = SimChatTeamManager.get(ctx.getSource().getServer());
+        Set<String> keys = new HashSet<>();
+
+        ServerPlayer player = null;
+        try {
+            player = ctx.getSource().getPlayerOrException();
+        } catch (CommandSyntaxException ignored) {
+        }
+
+        TeamData team = player != null ? manager.getPlayerTeam(player) : null;
+        if (team != null) {
+            keys.addAll(team.getDataKeys());
+        } else {
+            for (TeamData other : manager.getAllTeams()) {
+                keys.addAll(other.getDataKeys());
+            }
+        }
+
+        for (String key : keys) {
+            builder.suggest("\"" + key + "\"");
+        }
+
+        return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestEntityIds(CommandContext<CommandSourceStack> ctx, SuggestionsBuilder builder) {
+        SimChatTeamManager manager = SimChatTeamManager.get(ctx.getSource().getServer());
+        Set<String> entityIds = new HashSet<>();
+
+        ServerPlayer player = null;
+        try {
+            player = EntityArgument.getPlayer(ctx, "player");
+        } catch (CommandSyntaxException ignored) {
+        }
+
+        if (player == null) {
+            try {
+                player = ctx.getSource().getPlayerOrException();
+            } catch (CommandSyntaxException ignored) {
+            }
+        }
+
+        TeamData team = player != null ? manager.getPlayerTeam(player) : null;
+        if (team != null) {
+            entityIds.addAll(team.getEntityIds());
+        } else {
+            for (TeamData other : manager.getAllTeams()) {
+                entityIds.addAll(other.getEntityIds());
+            }
+        }
+
+        return SharedSuggestionProvider.suggest(entityIds, builder);
     }
 
     /**

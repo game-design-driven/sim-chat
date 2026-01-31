@@ -30,7 +30,7 @@
   "simchat.command.error.target_no_team": "%s has no team",
 
   "simchat.command.send.success": "Sending dialogue %s to %s",
-  "simchat.command.clear.all": "Cleared all conversations for team %s",
+  "simchat.command.clear.all": "Cleared all conversations and team data for team %s",
   "simchat.command.clear.entity": "Cleared conversation with %s",
 
   "simchat.command.team.created": "Created and joined team '%s' (ID: %s)",

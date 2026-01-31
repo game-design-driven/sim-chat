@@ -59,6 +59,25 @@ public class TeamData {
             0xFFF2F2F2  // white
     };
 
+    public static final int[] VANILLA_COLOR_VALUES = {
+            0xFF000000, // black
+            0xFF0000AA, // dark_blue
+            0xFF00AA00, // dark_green
+            0xFF00AAAA, // dark_aqua
+            0xFFAA0000, // dark_red
+            0xFFAA00AA, // dark_purple
+            0xFFFFAA00, // gold
+            0xFFAAAAAA, // gray
+            0xFF555555, // dark_gray
+            0xFF5555FF, // blue
+            0xFF55FF55, // green
+            0xFF55FFFF, // aqua
+            0xFFFF5555, // red
+            0xFFFF55FF, // light_purple
+            0xFFFFFF55, // yellow
+            0xFFFFFFFF  // white
+    };
+
     public static class ConversationMeta {
         private int messageCount;
         private @Nullable ChatMessage lastMessage;
@@ -137,6 +156,10 @@ public class TeamData {
         return getColorValue(color);
     }
 
+    public int getVanillaColorValue() {
+        return getVanillaColorValue(color);
+    }
+
     public static String getColorName(int colorIndex) {
         int index = Math.max(0, Math.min(15, colorIndex));
         return COLOR_NAMES[index];
@@ -145,6 +168,11 @@ public class TeamData {
     public static int getColorValue(int colorIndex) {
         int index = Math.max(0, Math.min(15, colorIndex));
         return SOFT_COLOR_VALUES[index];
+    }
+
+    public static int getVanillaColorValue(int colorIndex) {
+        int index = Math.max(0, Math.min(15, colorIndex));
+        return VANILLA_COLOR_VALUES[index];
     }
 
     public int getRevision() {
@@ -479,6 +507,16 @@ public class TeamData {
      */
     public void removeData(String key) {
         if (data.remove(key) != null) {
+            revision++;
+        }
+    }
+
+    /**
+     * Clears all data keys.
+     */
+    public void clearData() {
+        if (!data.isEmpty()) {
+            data.clear();
             revision++;
         }
     }

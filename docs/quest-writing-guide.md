@@ -564,10 +564,10 @@ After editing KubeJS scripts:
 ### Managing Conversations
 
 ```bash
-# Clear all conversations for a player's team
+# Clear all conversations and team data for a player's team
 /simchat clear <player>
 
-# Clear specific NPC conversation
+# Clear specific NPC conversation (team data untouched)
 /simchat clear <player> <entityId>
 /simchat clear @p engineer_foreman
 ```
@@ -1054,3 +1054,4 @@ Add fallback options for players who get stuck:
 /simchat reload
 ```
 
+Note: `/simchat clear <player>` also clears team data.

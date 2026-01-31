@@ -5,9 +5,11 @@
   "simchat.screen.no_messages": "No messages yet",
   "simchat.screen.select_conversation": "Select a conversation",
   "simchat.screen.refresh": "Refresh",
+  "simchat.screen.sort_hint": "Tap to sort",
 
   "simchat.chat.typing": "typing",
   "simchat.chat.day": "Day %s",
+  "simchat.chat.send": "Send",
 
   "simchat.transaction.sold": "Sold:",
   "simchat.transaction.received": "Received:",

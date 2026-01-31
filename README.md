@@ -1,8 +1,6 @@
 # Sim Chat
 
-A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogues. Designed for modpack creators to script conversations via datapacks and commands.
-
-## Features
+A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogues. Designed for modpack creators to script conversations via datapacks and commands. This is used as replacement for ftb quests or similar in the modpack [Create: Prepare to dye 2](https://github.com/game-design-driven/Create-Prepare-to-Dye-2)
 
 - **Slack/Discord-style UI**: Sidebar with conversation list, chat history panel with message bubbles
 - **Team-based conversations**: Players share conversation history within their team
@@ -15,21 +13,7 @@ A Minecraft Forge mod that adds a slack/discord-style chat interface for dialogu
 - **Custom avatars**: Load PNG images from config folder for sender portraits
 - **Team data storage**: Store values, states, and scores per-team
 - **KubeJS integration**: Register custom callbacks for conditions and templates
-- **SQLite storage**: Persistent message history with lazy loading for large conversations
-- **Scalable**: Handles 100k+ messages with smooth scrolling and instant UI response
-
-## Dependencies
-
-- Requires the `sqlite_jdbc` library mod (`minecraft-sqlite-jdbc`) on both client and server
-
-## Storage
-
-Conversation history is stored in a SQLite database at `<world>/data/simchat/simchat.db`. This provides:
-
-- **Scalability**: Handles 100k+ messages efficiently with lazy loading
-- **Persistence**: Data survives server restarts and world reloads
-- **Inspectability**: Messages stored as human-readable JSON (viewable in any SQLite browser)
-
+- **SQLite storage**: Persistent message history with lazy loading for large conversations. Handles 100k+ messages with smooth scrolling and instant UI response
 ## Commands
 
 ### Basic Commands
@@ -37,7 +21,7 @@ Conversation history is stored in a SQLite database at `<world>/data/simchat/sim
 ```
 /simchat send <player> <dialogueId>    - Send dialogue to player
 /simchat system <player> <entityId> <message>  - Send system message
-/simchat clear <player> [entityId]     - Clear chat history
+/simchat clear <player> [entityId]     - Clear chat history (clears team data when no entityId)
 /simchat open <player> [entityId]      - Open chat screen for player
 /simchat openmessage <messageId>       - Open chat to a specific message
 /simchat reload                        - Reload KubeJS callbacks
@@ -54,8 +38,6 @@ Conversation history is stored in a SQLite database at `<world>/data/simchat/sim
 /simchat team title <newTitle>         - Change team name
 /simchat team color <color>            - Change team color (name only)
 ```
-
-Available colors: `black`, `dark_blue`, `dark_green`, `dark_aqua`, `dark_red`, `dark_purple`, `gold`, `gray`, `dark_gray`, `blue`, `green`, `aqua`, `red`, `light_purple`, `yellow`, `white`
 
 ### Data Commands
 
